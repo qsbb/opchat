@@ -165,7 +165,8 @@ public class ChatBubbleConfigScreen extends Screen {
 
     @Override
     public void render(DrawContext context, int mouseX, int mouseY, float delta) {
-        renderBackground(context, mouseX, mouseY, delta);
+        renderInGameBackground(context);
+        renderDarkening(context);
         context.drawCenteredTextWithShadow(textRenderer, title, width / 2, 14, 0xFFFFFFFF);
 
         int y = START_Y + 6 - scrollOffset;
