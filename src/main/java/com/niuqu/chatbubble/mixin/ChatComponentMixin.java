@@ -40,7 +40,7 @@ public class ChatComponentMixin {
     private void captureMessage(Text finalComponent) {
         if (!ChatBubbleConfig.ENABLED) return;
 
-        SenderMeta meta = ChatMessageStore.consumePendingMeta();
+        SenderMeta meta = ChatMessageStore.consumePendingMeta(finalComponent.getString());
         if (meta == null) {
             if (ChatMessageStore.isRecentDuplicate(finalComponent.getString())) return;
             meta = new SenderMeta(
