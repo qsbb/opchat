@@ -4,6 +4,7 @@ import com.niuqu.chatbubble.ChatBubbleConfig;
 import com.niuqu.chatbubble.ChatMessageStore;
 import com.niuqu.chatbubble.ChatMessageStore.SenderMeta;
 import java.util.UUID;
+import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.hud.ChatHud;
 import net.minecraft.client.gui.hud.MessageIndicator;
@@ -18,7 +19,7 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 public class ChatComponentMixin {
 
     @Inject(method = "render", at = @At("HEAD"), cancellable = true, require = 0)
-    private void onRender(DrawContext context, int currentTick, int mouseX, int mouseY, CallbackInfo ci) {
+    private void onRender(DrawContext context, TextRenderer textRenderer, int currentTick, int mouseX, int mouseY, boolean focused, boolean bl, CallbackInfo ci) {
         if (ChatBubbleConfig.ENABLED) {
             ci.cancel();
         }
