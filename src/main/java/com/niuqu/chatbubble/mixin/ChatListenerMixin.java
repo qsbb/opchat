@@ -6,6 +6,7 @@ import com.niuqu.chatbubble.ChatMessageStore;
 import com.niuqu.chatbubble.ChatMessageStore.SenderMeta;
 import net.minecraft.client.network.message.MessageHandler;
 import net.minecraft.network.message.MessageType;
+import net.minecraft.network.message.SignedMessage;
 import net.minecraft.text.Text;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.injection.At;
@@ -18,8 +19,9 @@ import java.util.UUID;
 public class ChatListenerMixin {
 
     @Inject(method = "onChatMessage", at = @At("HEAD"))
-    private void onPlayerChat(Text message, GameProfile senderProfile, MessageType.Parameters params, CallbackInfo ci) {
+    private void onPlayerChat(SignedMessage signedMessage, GameProfile senderProfile, MessageType.Parameters params, CallbackInfo ci) {
         UUID senderId = senderProfile.getId();
+        Text message = signedMessage.getContent();
         String rawStr = message.getString();
         if (rawStr.startsWith("xaero-waypoint:")
             || rawStr.startsWith("xaero_waypoint:")
