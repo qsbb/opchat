@@ -18,12 +18,18 @@
   "opchat.config.preview_lines": "预览行数",
   "opchat.config.preview_width": "预览宽度",
   "opchat.config.panel_opacity": "面板透明度 (0-100)",
+  "opchat.config.whisper_history_days": "私聊记录保留天数 (0=永不)",
+  "opchat.config.bot_prefixes": "假人前缀 (逗号分隔)",
   "opchat.context.copy": "复制",
   "opchat.context.quote": "引用",
+  "opchat.context.whisper": "私聊",
   "opchat.toast.copied": "已复制",
   "opchat.config.mention_highlight": "被@时高亮",
   "opchat.config.mention_highlight_color": "@高亮边框色",
   "opchat.sender.system": "系统",
   "opchat.notif.new_messages": "条新消息",
-  "opchat.notif.mention": "有人@你"
+  "opchat.notif.mention": "有人@你",
+  "opchat.contact.public": "公共聊天",
+  "opchat.contact.hidden_group": "已隐藏",
+  "opchat.title.whisper": "私聊"
 }

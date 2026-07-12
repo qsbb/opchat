@@ -41,6 +41,8 @@ public class ChatComponentMixin {
     private void capturePendingMessage(Text finalComponent) {
         if (!ChatBubbleConfig.ENABLED) return;
 
+        if (ChatMessageStore.consumePendingWhisper(finalComponent)) return;
+
         SenderMeta meta = ChatMessageStore.consumePendingMeta(finalComponent.getString());
         if (meta == null) return; // already handled directly by listener mixin
 

@@ -18,12 +18,18 @@
   "opchat.config.preview_lines": "Preview Lines",
   "opchat.config.preview_width": "Preview Width",
   "opchat.config.panel_opacity": "Panel Opacity (0-100)",
+  "opchat.config.whisper_history_days": "Whisper History Days (0=never)",
+  "opchat.config.bot_prefixes": "Bot Prefixes (comma-separated)",
   "opchat.context.copy": "Copy",
   "opchat.context.quote": "Quote",
+  "opchat.context.whisper": "Whisper",
   "opchat.toast.copied": "Copied",
   "opchat.config.mention_highlight": "Mention Highlight",
   "opchat.config.mention_highlight_color": "Highlight Border Color",
   "opchat.sender.system": "System",
   "opchat.notif.new_messages": " new messages",
-  "opchat.notif.mention": "You were mentioned"
+  "opchat.notif.mention": "You were mentioned",
+  "opchat.contact.public": "Public",
+  "opchat.contact.hidden_group": "Hidden",
+  "opchat.title.whisper": "Whisper"
 }

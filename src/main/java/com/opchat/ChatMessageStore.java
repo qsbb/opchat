@@ -59,6 +59,35 @@ public class ChatMessageStore {
         return null;
     }
 
+    private static String pendingWhisperTarget;
+    private static String pendingWhisperSender;
+    private static boolean pendingWhisperOutgoing;
+
+    public static void setPendingWhisper(String target, String sender, boolean outgoing) {
+        pendingWhisperTarget = target;
+        pendingWhisperSender = sender;
+        pendingWhisperOutgoing = outgoing;
+    }
+
+    public static boolean consumePendingWhisper(Text message) {
+        if (pendingWhisperTarget == null) return false;
+        String target = pendingWhisperTarget;
+        String sender = pendingWhisperSender;
+        boolean outgoing = pendingWhisperOutgoing;
+        pendingWhisperTarget = null;
+        pendingWhisperSender = null;
+        pendingWhisperOutgoing = false;
+        if (outgoing) {
+            WhisperHistory.addOutgoing(target, message.getString());
+        } else {
+            WhisperHistory.addIncoming(sender, message.getString());
+            if (!screenOpen) {
+                ChatBubbleHudOverlay.showNotification(sender + ": " + message.getString());
+            }
+        }
+        return true;
+    }
+
     private static int pendingEchoCount;
     private static final List<String> pendingEchoTexts = new ArrayList<>();
 
@@ -212,6 +241,7 @@ public class ChatMessageStore {
                 previews.add(new PreviewEntry(preview, PREVIEW_TICKS));
                 while (previews.size() > ChatBubbleConfig.PREVIEW_LINES)
                     previews.remove(0);
+                ChatBubbleHudOverlay.showNotification(preview);
             }
             if (systemToHint && !mentionToHint) {
                 strongHintText = content.getString();
@@ -249,7 +279,12 @@ public class ChatMessageStore {
         screenOpen = open;
         if (open) {
             unreadCount = 0;
+            ChatBubbleHudOverlay.dismissNotification();
         }
+    }
+
+    public static boolean isScreenOpen() {
+        return screenOpen;
     }
 
     public static boolean hasUnreadMention(String playerName) {

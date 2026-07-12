@@ -44,6 +44,11 @@ public class ChatBubbleScreen extends Screen {
     private static final int TIME_SEP_H = 14;
     private static final int BAR_H = 38;
 
+    // Sidebar (contacts)
+    private static final int SIDEBAR_W = 90;
+    private static final int SIDEBAR_ITEM_H = 18;
+    private static final int SIDEBAR_TOP = 4;
+
     private static final int ICON_S = 16;
     private static final Identifier TEX_GEAR = Identifier.of("opchat", "textures/gui/settings");
     private static final Identifier TEX_SEND = Identifier.of("opchat", "textures/gui/send");
@@ -56,6 +61,7 @@ public class ChatBubbleScreen extends Screen {
     private int colorTitleBg;
     private int colorBarBg;
     private int colorInputBg;
+    private int colorSidebarBg;
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
 
     private TextFieldWidget input;
@@ -87,6 +93,30 @@ public class ChatBubbleScreen extends Screen {
     // Reply / quote
     private int replyTargetIndex = -1;
 
+    // Private chat target (null = public chat)
+    private String selectedContact = null;
+    private int sidebarScroll = 0;
+
+    // Contact right-click context menu
+    private String contextMenuContact;
+    private String contextMenuContactGroupName; // null = not in any group
+    private int contextMenuX, contextMenuY;
+    private boolean subMenuVisible; // "add to group" submenu
+    private static final int CTX_MENU_W = 90;
+    private static final int CTX_SUB_W = 100;
+
+    // Avatar right-click context menu (in public chat)
+    private String avatarMenuPlayer; // null = no avatar menu open
+    private int avatarMenuX, avatarMenuY;
+    private boolean avatarSubMenuVisible; // quick commands submenu
+    private static final int AVATAR_MENU_W = 100;
+    private static final int AVATAR_SUB_W = 160;
+
+    // Nickname editor
+    private boolean editingNickname;
+    private String nicknameEditTarget;
+    private TextFieldWidget nicknameField;
+
     // Quick inputs
     private boolean quickPanelOpen;
     private TextFieldWidget quickEditField;
@@ -94,6 +124,21 @@ public class ChatBubbleScreen extends Screen {
     private static final int QUICK_PANEL_W = 180;
     private static final int QUICK_ITEM_H = 18;
     private static final int QUICK_EDIT_H = 22;
+
+    // Quick commands (/ shortcut)
+    private int slashIconX;
+    private boolean quickCmdPanelOpen;
+    private boolean quickCmdEditing; // show add/edit form
+    private int quickCmdEditIndex = -1;
+    private TextFieldWidget quickCmdDisplayField;
+    private TextFieldWidget quickCmdCommandField;
+    private ChatInputSuggestor quickCmdSuggestor;
+    private static final int QUICK_CMD_PANEL_W = 200;
+    private static final int QUICK_CMD_ITEM_H = 18;
+    private static final int QUICK_CMD_FORM_H = 78;
+
+    // Hidden contacts group (collapsible)
+    private boolean hiddenGroupExpanded = false;
 
     // Copy toast
     private int copyToastTicks;
@@ -122,15 +167,21 @@ public class ChatBubbleScreen extends Screen {
         ChatMessageStore.setScreenOpen(true);
         animStart = net.minecraft.util.Util.getMeasuringTimeMs();
         closing = false;
-
+        contextMenuContact = null;
+        contextMenuContactGroupName = null;
+        subMenuVisible = false;
+        avatarMenuPlayer = null;
+        avatarSubMenuVisible = false;
+        editingNickname = false;
         int a = (int)(MathHelper.clamp(ChatBubbleConfig.PANEL_OPACITY, 0, 100) * 2.55f);
         colorPanelBg = (a << 24) | 0x1E1E1E;
         colorTitleBg = (a << 24) | 0x242424;
         colorBarBg = (a << 24) | 0x242424;
         colorInputBg = (a << 24) | 0x2A2A2A;
+        colorSidebarBg = (a << 24) | 0x161616;
 
         panelW = Math.max(200, (int) (width * 0.4));
-        panelX = 0;
+        panelX = SIDEBAR_W;
         titleY = 4;
         msgTop = titleY + TITLE_H + 1;
         barTop = height - BAR_H;
@@ -140,7 +191,8 @@ public class ChatBubbleScreen extends Screen {
         inputY = ibY;
         int sendX = panelX + panelW - PAD - ICON_S;
         quickIconX = sendX - ICON_S - 6;
-        int inputX = panelX + PAD + ICON_S + 8;
+        slashIconX = panelX + PAD;
+        int inputX = slashIconX + ICON_S + 4;
         int inputW = quickIconX - 6 - inputX;
 
         input = new TextFieldWidget(textRenderer, inputX, ibY, inputW, 20, Text.literal(""));
@@ -166,6 +218,28 @@ public class ChatBubbleScreen extends Screen {
         quickEditField.setVisible(false);
         addDrawableChild(quickEditField);
 
+        // Quick command edit form fields
+        quickCmdDisplayField = new TextFieldWidget(textRenderer, 0, 0, 0, 16, Text.literal(""));
+        quickCmdDisplayField.setMaxLength(64);
+        quickCmdDisplayField.setDrawsBackground(false);
+        quickCmdDisplayField.setVisible(false);
+        addDrawableChild(quickCmdDisplayField);
+
+        quickCmdCommandField = new TextFieldWidget(textRenderer, 0, 0, 0, 16, Text.literal(""));
+        quickCmdCommandField.setMaxLength(256);
+        quickCmdCommandField.setDrawsBackground(false);
+        quickCmdCommandField.setVisible(false);
+        quickCmdCommandField.setChangedListener(text -> {
+            if (quickCmdSuggestor != null) {
+                quickCmdSuggestor.setWindowActive(text.startsWith("/"));
+                quickCmdSuggestor.refresh();
+            }
+        });
+        addDrawableChild(quickCmdCommandField);
+
+        quickCmdSuggestor = new ChatInputSuggestor(client, this, quickCmdCommandField, textRenderer,
+            false, false, 0, 8, true, 0xDD1E1E1E);
+
         if (!iconsLoaded) {
             loadIconTextures();
             iconsLoaded = true;
@@ -181,6 +255,12 @@ public class ChatBubbleScreen extends Screen {
         titleEditor.setDrawsBackground(false);
         titleEditor.setVisible(false);
         addDrawableChild(titleEditor);
+
+        nicknameField = new TextFieldWidget(textRenderer, 0, 0, 120, 16, Text.literal(""));
+        nicknameField.setMaxLength(32);
+        nicknameField.setDrawsBackground(false);
+        nicknameField.setVisible(false);
+        addDrawableChild(nicknameField);
     }
 
     @Override
@@ -226,10 +306,53 @@ public class ChatBubbleScreen extends Screen {
             if (keyCode == 257 || keyCode == 335) { exitTitleEdit(true); return true; }
             return titleEditor.keyPressed(keyInput);
         }
+        if (editingNickname) {
+            if (keyCode == 256) { editingNickname = false; nicknameField.setVisible(false); input.setFocused(true); setFocused(input); return true; }
+            if (keyCode == 257 || keyCode == 335) { saveNickname(); return true; }
+            return nicknameField.keyPressed(keyInput);
+        }
         if (quickPanelOpen && quickEditField.isVisible() && quickEditField.isFocused()) {
             if (keyCode == 256) { closeQuickPanel(); return true; }
             if (keyCode == 257 || keyCode == 335) { addQuickInputFromField(); return true; }
             return quickEditField.keyPressed(keyInput);
+        }
+        if (quickCmdPanelOpen && quickCmdEditing
+            && (quickCmdDisplayField.isFocused() || quickCmdCommandField.isFocused())) {
+            if (quickCmdCommandField.isFocused() && quickCmdSuggestor != null
+                && quickCmdSuggestor.keyPressed(keyInput)) {
+                return true;
+            }
+            if (keyCode == 256) {
+                quickCmdEditing = false;
+                quickCmdDisplayField.setVisible(false);
+                quickCmdCommandField.setVisible(false);
+                if (quickCmdSuggestor != null) quickCmdSuggestor.clearWindow();
+                input.setFocused(true);
+                setFocused(input);
+                return true;
+            }
+            if (keyCode == 257 || keyCode == 335) {
+                if (quickCmdCommandField.isFocused()) {
+                    saveQuickCommand();
+                    return true;
+                }
+                quickCmdCommandField.setFocused(true);
+                setFocused(quickCmdCommandField);
+                return true;
+            }
+            if (keyCode == 258) {
+                // Tab: toggle focus between fields
+                if (quickCmdDisplayField.isFocused()) {
+                    quickCmdCommandField.setFocused(true);
+                    setFocused(quickCmdCommandField);
+                } else {
+                    quickCmdDisplayField.setFocused(true);
+                    setFocused(quickCmdDisplayField);
+                }
+                return true;
+            }
+            if (quickCmdDisplayField.isFocused()) return quickCmdDisplayField.keyPressed(keyInput);
+            return quickCmdCommandField.keyPressed(keyInput);
         }
         if (commandSuggestions != null && commandSuggestions.keyPressed(keyInput))
             return true;
@@ -246,7 +369,16 @@ public class ChatBubbleScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        if (mouseX < SIDEBAR_W) {
+            sidebarScroll -= (int) (verticalAmount * 3);
+            sidebarScroll = Math.max(0, sidebarScroll);
+            return true;
+        }
         if (commandSuggestions != null && commandSuggestions.mouseScrolled(verticalAmount))
+            return true;
+        if (quickCmdPanelOpen && quickCmdEditing && quickCmdSuggestor != null
+            && quickCmdCommandField.isFocused()
+            && quickCmdSuggestor.mouseScrolled(verticalAmount))
             return true;
         scrollToBottom = false;
         scrollOffset -= (int) (verticalAmount * 20);
@@ -282,6 +414,173 @@ public class ChatBubbleScreen extends Screen {
                 closeQuickPanel();
                 return true;
             }
+        }
+
+        // Quick command panel click handling
+        if (quickCmdPanelOpen) {
+            int[] b = getQuickCmdPanelBounds();
+            boolean inPanel = b != null && mouseX >= b[0] && mouseX <= b[0] + b[2]
+                && mouseY >= b[1] && mouseY <= b[1] + b[3];
+            int iconY = barTop + (BAR_H - ICON_S) / 2;
+            boolean onToggle = mouseX >= slashIconX && mouseX <= slashIconX + ICON_S
+                && mouseY >= iconY && mouseY <= iconY + ICON_S;
+            if (inPanel && button == 0) {
+                handleQuickCmdPanelClick((int) mouseX, (int) mouseY);
+                return true;
+            }
+            if (!inPanel && !onToggle) {
+                closeQuickCmdPanel();
+                return true;
+            }
+        }
+
+        // Context menu: check first so clicks on the popup are not stolen by sidebar
+        if (contextMenuContact != null && button == 0) {
+            int menuItems = 4; // pin/hide/add-or-remove/nickname
+            int menuH = CTX_ITEM_H * menuItems;
+
+            // Check submenu first
+            if (subMenuVisible) {
+                int subX = contextMenuX + CTX_MENU_W;
+                int subItems = ChatBubbleConfig.CONTACT_GROUPS.size() + 1; // groups + new group
+                int subH = CTX_ITEM_H * subItems;
+                if (mouseX >= subX && mouseX <= subX + CTX_SUB_W
+                    && mouseY >= contextMenuY + CTX_ITEM_H * 2 && mouseY <= contextMenuY + CTX_ITEM_H * 2 + subH) {
+                    int item = (int) ((mouseY - (contextMenuY + CTX_ITEM_H * 2)) / CTX_ITEM_H);
+                    if (item < ChatBubbleConfig.CONTACT_GROUPS.size()) {
+                        String groupName = ChatBubbleConfig.CONTACT_GROUPS.get(item).name;
+                        ChatBubbleConfig.addToGroup(groupName, contextMenuContact);
+                    } else {
+                        // New group - create with default name
+                        String baseName = "\u65b0\u5206\u7ec4";
+                        String name = baseName;
+                        int n = 2;
+                        while (true) {
+                            boolean exists = false;
+                            for (var g : ChatBubbleConfig.CONTACT_GROUPS) {
+                                if (g.name.equals(name)) { exists = true; break; }
+                            }
+                            if (!exists) break;
+                            name = baseName + n++;
+                        }
+                        ChatBubbleConfig.addGroup(name);
+                        ChatBubbleConfig.addToGroup(name, contextMenuContact);
+                    }
+                    contextMenuContact = null;
+                    subMenuVisible = false;
+                    return true;
+                }
+            }
+
+            if (mouseX >= contextMenuX && mouseX <= contextMenuX + CTX_MENU_W
+                && mouseY >= contextMenuY && mouseY <= contextMenuY + menuH) {
+                int item = (int) ((mouseY - contextMenuY) / CTX_ITEM_H);
+                if (item == 0) {
+                    WhisperHistory.togglePin(contextMenuContact);
+                    contextMenuContact = null;
+                } else if (item == 1) {
+                    WhisperHistory.setHidden(contextMenuContact, !WhisperHistory.isHidden(contextMenuContact));
+                    if (contextMenuContact.equals(selectedContact)) {
+                        selectedContact = null;
+                        resetViewState();
+                    }
+                    contextMenuContact = null;
+                } else if (item == 2) {
+                    if (contextMenuContactGroupName != null) {
+                        ChatBubbleConfig.removeFromGroup(contextMenuContactGroupName, contextMenuContact);
+                        contextMenuContact = null;
+                    } else {
+                        subMenuVisible = !subMenuVisible;
+                    }
+                } else if (item == 3) {
+                    String target = contextMenuContact;
+                    contextMenuContact = null;
+                    openNicknameEditor(target);
+                }
+                return true;
+            }
+            contextMenuContact = null;
+            subMenuVisible = false;
+            return true;
+        }
+
+        // Avatar context menu (right-clicked player avatar in public chat)
+        if (avatarMenuPlayer != null && button == 0) {
+            int menuItems = 3;
+            int menuH = CTX_ITEM_H * menuItems;
+
+            // Check submenu first (quick commands)
+            if (avatarSubMenuVisible) {
+                int subX = avatarMenuX + AVATAR_MENU_W;
+                int subItems = ChatBubbleConfig.QUICK_COMMANDS.size();
+                int subH = CTX_ITEM_H * Math.max(subItems, 1);
+                if (mouseX >= subX && mouseX <= subX + AVATAR_SUB_W
+                    && mouseY >= avatarMenuY + CTX_ITEM_H && mouseY <= avatarMenuY + CTX_ITEM_H + subH) {
+                    int item = (int) ((mouseY - (avatarMenuY + CTX_ITEM_H)) / CTX_ITEM_H);
+                    if (item >= 0 && item < ChatBubbleConfig.QUICK_COMMANDS.size()) {
+                        String player = avatarMenuPlayer;
+                        avatarMenuPlayer = null;
+                        avatarSubMenuVisible = false;
+                        executeQuickCommandForPlayer(ChatBubbleConfig.QUICK_COMMANDS.get(item), player);
+                    }
+                    return true;
+                }
+            }
+
+            if (mouseX >= avatarMenuX && mouseX <= avatarMenuX + AVATAR_MENU_W
+                && mouseY >= avatarMenuY && mouseY <= avatarMenuY + menuH) {
+                int item = (int) ((mouseY - avatarMenuY) / CTX_ITEM_H);
+                if (item == 0) {
+                    // Private chat
+                    selectedContact = avatarMenuPlayer;
+                    avatarMenuPlayer = null;
+                    resetViewState();
+                    input.setFocused(true);
+                    setFocused(input);
+                } else if (item == 1) {
+                    // Quick commands submenu
+                    avatarSubMenuVisible = !avatarSubMenuVisible;
+                } else if (item == 2) {
+                    // Set nickname
+                    String target = avatarMenuPlayer;
+                    avatarMenuPlayer = null;
+                    openNicknameEditor(target);
+                }
+                return true;
+            }
+            avatarMenuPlayer = null;
+            avatarSubMenuVisible = false;
+            return true;
+        }
+
+        // Nickname editor click handling
+        if (editingNickname && button == 0) {
+            int nickW = 140;
+            int nickH = 36;
+            int nickX = width / 2 - nickW / 2;
+            int nickY = height / 2 - nickH / 2;
+            if (mouseX >= nickX && mouseX <= nickX + nickW && mouseY >= nickY && mouseY <= nickY + nickH) {
+                // Click inside editor - focus the field
+                int fieldY = nickY + 14;
+                if (mouseY >= fieldY && mouseY <= fieldY + 16) {
+                    nicknameField.setFocused(true);
+                    setFocused(nicknameField);
+                }
+                return true;
+            }
+            // Click outside - save and close
+            saveNickname();
+            return true;
+        }
+
+        if (button == 0 && mouseX < SIDEBAR_W) {
+            handleSidebarClick((int) mouseX, (int) mouseY);
+            return true;
+        }
+
+        if (button == 1 && mouseX < SIDEBAR_W) {
+            handleSidebarRightClick((int) mouseX, (int) mouseY);
+            return true;
         }
 
         if (button == 0 && mouseX >= panelX + panelW) {
@@ -320,6 +619,12 @@ public class ChatBubbleScreen extends Screen {
                 return true;
         }
 
+        if (quickCmdPanelOpen && quickCmdEditing && quickCmdSuggestor != null
+            && quickCmdCommandField.isFocused()
+            && quickCmdSuggestor.mouseClicked(click)) {
+            return true;
+        }
+
         if (button == 0) {
             if (editingTitle) {
                 if (!isMouseOverTitleEditor(mouseX, mouseY)) {
@@ -330,6 +635,14 @@ public class ChatBubbleScreen extends Screen {
             }
             if (isMouseOverPen(mouseX, mouseY)) {
                 enterTitleEdit();
+                return true;
+            }
+            // Settings gear in title bar
+            int gearX = panelX + PAD;
+            int gearY = titleY + (TITLE_H - ICON_S) / 2;
+            if (mouseX >= gearX && mouseX <= gearX + ICON_S
+                && mouseY >= gearY && mouseY <= gearY + ICON_S) {
+                client.setScreen(new ChatBubbleConfigScreen(this));
                 return true;
             }
             if (mouseX >= panelX + panelW - 18 && mouseX <= panelX + panelW - 6
@@ -345,7 +658,7 @@ public class ChatBubbleScreen extends Screen {
 
         if (button == 0) {
             for (int[] r : bubbleRects) {
-                ChatMessageStore.ChatMessage msg = ChatMessageStore.getMessageAt(r[4]);
+                ChatMessageStore.ChatMessage msg = getMessageAt(r[4]);
                 if (msg == null || msg.isSystem()) continue;
                 int avatarX = r[0] - AVATAR - 4;
                 int avatarY = r[1] - 6;
@@ -360,6 +673,26 @@ public class ChatBubbleScreen extends Screen {
         }
 
         if (button == 1) {
+            for (int[] r : bubbleRects) {
+                int avatarX = r[0] - AVATAR - 4;
+                int avatarY = r[1] - 6;
+                if (mouseX >= avatarX && mouseX <= avatarX + AVATAR
+                    && mouseY >= avatarY && mouseY <= avatarY + AVATAR) {
+                    ChatMessageStore.ChatMessage msg = getMessageAt(r[4]);
+                    if (msg != null && !msg.isOwn() && !msg.isSystem() && selectedContact == null) {
+                        String sender = msg.senderName().getString();
+                        if (!sender.isEmpty()) {
+                            avatarMenuPlayer = sender;
+                            avatarSubMenuVisible = false;
+                            avatarMenuX = Math.min((int) mouseX, width - AVATAR_MENU_W - 2);
+                            int menuItems = 3;
+                            int menuH = CTX_ITEM_H * menuItems;
+                            avatarMenuY = Math.min((int) mouseY, height - menuH - 2);
+                        }
+                    }
+                    return true;
+                }
+            }
             for (int[] r : bubbleRects) {
                 if (mouseX >= r[0] && mouseX <= r[0] + r[2]
                     && mouseY >= r[1] && mouseY <= r[1] + r[3]) {
@@ -387,9 +720,9 @@ public class ChatBubbleScreen extends Screen {
 
     private boolean handleIconClick(int mx, int my) {
         int iconY = barTop + (BAR_H - ICON_S) / 2;
-        int gearX = panelX + PAD;
-        if (mx >= gearX && mx <= gearX + ICON_S && my >= iconY && my <= iconY + ICON_S) {
-            client.setScreen(new ChatBubbleConfigScreen(this));
+        int slashX = panelX + PAD;
+        if (mx >= slashX && mx <= slashX + ICON_S && my >= iconY && my <= iconY + ICON_S) {
+            toggleQuickCmdPanel();
             return true;
         }
         if (mx >= quickIconX && mx <= quickIconX + ICON_S && my >= iconY && my <= iconY + ICON_S) {
@@ -405,19 +738,21 @@ public class ChatBubbleScreen extends Screen {
     }
 
     private void handleContextClick(int mx, int my) {
-        int menuH = CTX_ITEM_H * 2 + 2;
+        ChatMessageStore.ChatMessage ctxMsg = getMessageAt(contextMsgIndex);
+        int menuH = CTX_ITEM_H * 2 + 1;
         int menuX = Math.min(contextX, panelX + panelW - CTX_W - 2);
         int menuY = contextY - menuH;
         if (menuY < msgTop) menuY = contextY + 4;
 
         if (mx >= menuX && mx <= menuX + CTX_W) {
             if (my >= menuY && my <= menuY + CTX_ITEM_H) {
-                ChatMessageStore.ChatMessage msg = ChatMessageStore.getMessageAt(contextMsgIndex);
-                if (msg != null) {
-                    client.keyboard.setClipboard(msg.content().getString());
+                // Copy
+                if (ctxMsg != null) {
+                    client.keyboard.setClipboard(ctxMsg.content().getString());
                     copyToastTicks = 20;
                 }
-            } else if (my >= menuY + CTX_ITEM_H + 1 && my <= menuY + CTX_ITEM_H * 2 + 1) {
+            } else if (my >= menuY + CTX_ITEM_H + 1 && my <= menuY + menuH) {
+                // Quote
                 replyTargetIndex = contextMsgIndex;
             }
         }
@@ -434,6 +769,7 @@ public class ChatBubbleScreen extends Screen {
 
         context.fill(panelX, 0, panelX + panelW, height, colorPanelBg);
 
+        renderSidebar(context, mouseX, mouseY);
         renderTitleBar(context, mouseX, mouseY);
         renderMessages(context, mouseX, mouseY);
         Style hovered = getHoveredStyle(mouseX, mouseY);
@@ -443,9 +779,12 @@ public class ChatBubbleScreen extends Screen {
         renderNotificationBar(context, mouseX, mouseY);
         renderReplyBar(context, mouseX, mouseY);
         renderContextMenu(context, mouseX, mouseY);
+        if (avatarMenuPlayer != null) renderAvatarMenu(context, mouseX, mouseY);
+        if (editingNickname) renderNicknameEditor(context, mouseX, mouseY);
         renderToast(context);
         renderBottomBar(context, mouseX, mouseY);
         if (quickPanelOpen) renderQuickPanel(context, mouseX, mouseY);
+        if (quickCmdPanelOpen) renderQuickCmdPanel(context, mouseX, mouseY);
 
         context.enableScissor(panelX, 0, panelX + panelW, height);
         if (commandSuggestions != null) {
@@ -456,15 +795,280 @@ public class ChatBubbleScreen extends Screen {
         }
         context.disableScissor();
 
+        if (quickCmdPanelOpen && quickCmdEditing && quickCmdSuggestor != null) {
+            quickCmdSuggestor.render(context, mouseX, mouseY);
+        }
+
         RenderSystem.getModelViewStack().popMatrix();
 
         super.render(context, mouseX, mouseY, delta);
+    }
+
+    private record SidebarEntry(int kind, String name, String groupName) {}
+    // kind: 0=group_header, 1=group_contact, 2=contact, 3=hidden, 4=hidden_group_header, 5=offline_contact
+
+    private java.util.List<SidebarEntry> getSidebarEntries() {
+        java.util.List<SidebarEntry> entries = new java.util.ArrayList<>();
+        if (client.getNetworkHandler() == null) return entries;
+        String selfName = client.player != null ? client.player.getName().getString() : "";
+        java.util.Set<String> onlineSet = new java.util.HashSet<>();
+        for (var entry : client.getNetworkHandler().getPlayerList()) {
+            String name = entry.getProfile().name();
+            if (name != null && !name.equals(selfName)) onlineSet.add(name);
+        }
+
+        // Group headers + members
+        for (var group : ChatBubbleConfig.CONTACT_GROUPS) {
+            entries.add(new SidebarEntry(0, null, group.name));
+            if (group.expanded) {
+                java.util.List<String> members = ChatBubbleConfig.getGroupOnlineMembers(group, onlineSet);
+                for (String m : members) {
+                    if (!WhisperHistory.isHidden(m)) {
+                        onlineSet.remove(m);
+                        entries.add(new SidebarEntry(1, m, group.name));
+                    }
+                }
+            } else {
+                // Remove group members from onlineSet so they don't appear in regular list
+                java.util.List<String> members = ChatBubbleConfig.getGroupOnlineMembers(group, onlineSet);
+                for (String m : members) {
+                    if (!WhisperHistory.isHidden(m)) onlineSet.remove(m);
+                }
+            }
+        }
+
+        // Pinned contacts first (only if online and not hidden)
+        for (String contact : WhisperHistory.getPinnedContacts()) {
+            if (!WhisperHistory.isHidden(contact) && onlineSet.remove(contact))
+                entries.add(new SidebarEntry(2, contact, null));
+        }
+        // Recent whisper contacts (most recent at top)
+        for (String contact : WhisperHistory.getRecentContacts()) {
+            if (!WhisperHistory.isHidden(contact) && onlineSet.remove(contact))
+                entries.add(new SidebarEntry(2, contact, null));
+        }
+        // Remaining online players, sorted alphabetically (excluding hidden)
+        java.util.List<String> rest = new java.util.ArrayList<>();
+        for (String name : onlineSet) {
+            if (!WhisperHistory.isHidden(name)) rest.add(name);
+        }
+        java.util.Collections.sort(rest);
+        for (String name : rest) entries.add(new SidebarEntry(2, name, null));
+
+        // Offline recent whisper contacts (keep conversations accessible)
+        java.util.Set<String> onlineLookup = new java.util.HashSet<>();
+        String selfName2 = client.player != null ? client.player.getName().getString() : "";
+        for (var entry2 : client.getNetworkHandler().getPlayerList()) {
+            String n = entry2.getProfile().name();
+            if (n != null && !n.equals(selfName2)) onlineLookup.add(n);
+        }
+        for (String contact : WhisperHistory.getRecentContacts()) {
+            if (!WhisperHistory.isHidden(contact) && !onlineLookup.contains(contact)) {
+                entries.add(new SidebarEntry(5, contact, null));
+            }
+        }
+
+        // Hidden contacts grouped at the bottom (online + offline)
+        java.util.List<String> allHidden = new java.util.ArrayList<>(WhisperHistory.getHiddenContacts());
+        if (!allHidden.isEmpty()) {
+            java.util.Collections.sort(allHidden);
+            entries.add(new SidebarEntry(4, null, Text.translatable("opchat.contact.hidden_group").getString()));
+            if (hiddenGroupExpanded) {
+                for (String name : allHidden) {
+                    entries.add(new SidebarEntry(3, name, null));
+                }
+            }
+        }
+        return entries;
+    }
+
+    private void renderSidebar(DrawContext context, int mouseX, int mouseY) {
+        int sx = 0;
+        int sw = SIDEBAR_W;
+
+        context.fill(sx, 0, sx + sw, height, colorSidebarBg);
+        context.fill(sx + sw - 1, 0, sx + sw, height, COLOR_DIVIDER);
+
+        int itemY = SIDEBAR_TOP;
+
+        // Public chat
+        boolean pubSelected = selectedContact == null;
+        boolean hoverPub = mouseX >= sx && mouseX <= sx + sw && mouseY >= itemY && mouseY <= itemY + SIDEBAR_ITEM_H;
+        if (pubSelected || hoverPub)
+            context.fill(sx, itemY, sx + sw, itemY + SIDEBAR_ITEM_H, pubSelected ? 0xFF2A4A7A : 0xFF333333);
+        String pubText = Text.translatable("opchat.contact.public").getString();
+        String pubDisplay = textRenderer.trimToWidth(pubText, sw - 8);
+        int pubColor = pubSelected ? 0xFFFFFFFF : (hoverPub ? 0xFFFFFFFF : 0xFFAAAAAA);
+        context.drawText(textRenderer, Text.literal(pubDisplay), sx + 4,
+            itemY + (SIDEBAR_ITEM_H - textRenderer.fontHeight) / 2, pubColor, false);
+
+        itemY += SIDEBAR_ITEM_H + 2;
+        context.fill(sx + 4, itemY, sx + sw - 4, itemY + 1, COLOR_DIVIDER);
+        itemY += 3;
+
+        // Sidebar entries (bot group + contacts)
+        java.util.List<SidebarEntry> entries = getSidebarEntries();
+        int sidebarBottom = barTop - 4;
+        int availableH = sidebarBottom - itemY;
+        int maxItems = Math.max(0, availableH / SIDEBAR_ITEM_H);
+
+        int maxScroll = Math.max(0, entries.size() - maxItems);
+        sidebarScroll = MathHelper.clamp(sidebarScroll, 0, maxScroll);
+
+        for (int i = sidebarScroll; i < entries.size() && i < sidebarScroll + maxItems; i++) {
+            SidebarEntry entry = entries.get(i);
+            int iy = itemY + (i - sidebarScroll) * SIDEBAR_ITEM_H;
+            boolean hover = mouseX >= sx && mouseX <= sx + sw && mouseY >= iy && mouseY <= iy + SIDEBAR_ITEM_H;
+
+            if (entry.kind() == 0) {
+                // Group header
+                if (hover)
+                    context.fill(sx, iy, sx + sw, iy + SIDEBAR_ITEM_H, 0xFF333333);
+                var group = ChatBubbleConfig.CONTACT_GROUPS.stream()
+                    .filter(g -> g.name.equals(entry.groupName())).findFirst().orElse(null);
+                int count = 0;
+                if (group != null && client.getNetworkHandler() != null) {
+                    java.util.Set<String> onlineSet = new java.util.HashSet<>();
+                    String selfName = client.player != null ? client.player.getName().getString() : "";
+                    for (var pe : client.getNetworkHandler().getPlayerList()) {
+                        String n = pe.getProfile().name();
+                        if (n != null && !n.equals(selfName)) onlineSet.add(n);
+                    }
+                    count = ChatBubbleConfig.getGroupOnlineMembers(group, onlineSet).size();
+                }
+                String arrow = group != null && group.expanded ? "\u25BC" : "\u25B6";
+                String headerText = arrow + " " + entry.groupName() + " (" + count + ")";
+                context.drawText(textRenderer, Text.literal(headerText), sx + 4,
+                    iy + (SIDEBAR_ITEM_H - textRenderer.fontHeight) / 2, 0xFFFFAA00, false);
+            } else if (entry.kind() == 4) {
+                // Hidden group header
+                if (hover)
+                    context.fill(sx, iy, sx + sw, iy + SIDEBAR_ITEM_H, 0xFF333333);
+                int count = WhisperHistory.getHiddenContacts().size();
+                String arrow = hiddenGroupExpanded ? "\u25BC" : "\u25B6";
+                String headerText = arrow + " " + entry.groupName() + " (" + count + ")";
+                context.drawText(textRenderer, Text.literal(headerText), sx + 4,
+                    iy + (SIDEBAR_ITEM_H - textRenderer.fontHeight) / 2, 0xFF888888, false);
+            } else {
+                String name = entry.name();
+                boolean selected = name.equals(selectedContact);
+                boolean hidden = entry.kind() == 3;
+                boolean isBot = entry.kind() == 1;
+                boolean offline = entry.kind() == 5;
+                if (selected || hover)
+                    context.fill(sx, iy, sx + sw, iy + SIDEBAR_ITEM_H, selected ? 0xFF2A4A7A : 0xFF333333);
+                boolean pinned = WhisperHistory.isPinned(name);
+                int indent = isBot ? 8 : 0;
+                int textMaxW = sw - (pinned ? 16 : 10) - indent;
+                String display = textRenderer.trimToWidth(WhisperHistory.getDisplayName(name), textMaxW);
+                int color = selected ? 0xFFFFFFFF : (hidden ? 0xFF666666 : (offline ? 0xFF777777 : (hover ? 0xFFFFFFFF : (pinned ? 0xFFFFD700 : (isBot ? 0xFFAAAAAA : 0xFFCCCCCC)))));
+                context.drawText(textRenderer, Text.literal(display), sx + 4 + indent,
+                    iy + (SIDEBAR_ITEM_H - textRenderer.fontHeight) / 2, color, false);
+                if (pinned) {
+                    context.drawText(textRenderer, Text.literal("*"),
+                        sx + sw - 10, iy + (SIDEBAR_ITEM_H - textRenderer.fontHeight) / 2, 0xFFFFD700, false);
+                }
+            }
+        }
+    }
+
+    private void handleSidebarClick(int mx, int my) {
+        int itemY = SIDEBAR_TOP;
+
+        if (my >= itemY && my <= itemY + SIDEBAR_ITEM_H) {
+            if (selectedContact != null) {
+                selectedContact = null;
+                resetViewState();
+            }
+            input.setFocused(true);
+            setFocused(input);
+            return;
+        }
+        itemY += SIDEBAR_ITEM_H + 2 + 3;
+
+        java.util.List<SidebarEntry> entries = getSidebarEntries();
+        int sidebarBottom = barTop - 4;
+        int availableH = sidebarBottom - itemY;
+        int maxItems = Math.max(0, availableH / SIDEBAR_ITEM_H);
+
+        for (int i = sidebarScroll; i < entries.size() && i < sidebarScroll + maxItems; i++) {
+            SidebarEntry entry = entries.get(i);
+            int iy = itemY + (i - sidebarScroll) * SIDEBAR_ITEM_H;
+            if (my >= iy && my <= iy + SIDEBAR_ITEM_H) {
+                if (entry.kind() == 0) {
+                    for (var g : ChatBubbleConfig.CONTACT_GROUPS) {
+                        if (g.name.equals(entry.groupName())) {
+                            g.expanded = !g.expanded;
+                            return;
+                        }
+                    }
+                    return;
+                }
+                if (entry.kind() == 4) {
+                    hiddenGroupExpanded = !hiddenGroupExpanded;
+                    return;
+                }
+                String name = entry.name();
+                if (!name.equals(selectedContact)) {
+                    selectedContact = name;
+                    resetViewState();
+                }
+                input.setFocused(true);
+                setFocused(input);
+                return;
+            }
+        }
+    }
+
+    private void handleSidebarRightClick(int mx, int my) {
+        int itemY = SIDEBAR_TOP + SIDEBAR_ITEM_H + 2 + 3;
+        java.util.List<SidebarEntry> entries = getSidebarEntries();
+        int sidebarBottom = barTop - 4;
+        int availableH = sidebarBottom - itemY;
+        int maxItems = Math.max(0, availableH / SIDEBAR_ITEM_H);
+
+        for (int i = sidebarScroll; i < entries.size() && i < sidebarScroll + maxItems; i++) {
+            SidebarEntry entry = entries.get(i);
+            int iy = itemY + (i - sidebarScroll) * SIDEBAR_ITEM_H;
+            if (my >= iy && my <= iy + SIDEBAR_ITEM_H) {
+                if (entry.kind() == 0 || entry.kind() == 4) return; // group header - no context menu
+                String name = entry.name();
+                contextMenuContact = name;
+                contextMenuContactGroupName = entry.kind() == 1 ? entry.groupName() : null;
+                subMenuVisible = false;
+                contextMenuX = Math.min(mx, width - CTX_MENU_W - 2);
+                int menuItems = 4; // pin/hide/add-or-remove/nickname
+                int menuH = CTX_ITEM_H * menuItems;
+                contextMenuY = Math.min(iy, height - menuH - 2);
+                return;
+            }
+        }
+        contextMenuContact = null;
+    }
+
+    private void resetViewState() {
+        scrollOffset = 0;
+        maxScroll = 0;
+        scrollToBottom = true;
+        newMessageCount = 0;
+        hasNewMentionOrQuote = false;
+        latestMentionIndex = -1;
+        lastSeenMessageCount = 0;
+        replyTargetIndex = -1;
     }
 
     private void renderTitleBar(DrawContext context, int mouseX, int mouseY) {
         int ty = titleY;
         context.fill(panelX, ty, panelX + panelW, ty + TITLE_H, colorTitleBg);
         context.fill(panelX, ty + TITLE_H, panelX + panelW, ty + TITLE_H + 1, COLOR_DIVIDER);
+
+        // Settings gear (top-left of title bar)
+        int gearX = panelX + PAD;
+        int gearY = ty + (TITLE_H - ICON_S) / 2;
+        boolean hoverGear = mouseX >= gearX && mouseX <= gearX + ICON_S
+            && mouseY >= gearY && mouseY <= gearY + ICON_S;
+        if (hoverGear) context.fill(gearX - 1, gearY - 1, gearX + ICON_S + 1, gearY + ICON_S + 1, 0xFF444444);
+        drawTextureIcon(context, TEX_GEAR, gearX, gearY, ICON_S);
 
         if (editingTitle) {
             // titleEditor rendered via super
@@ -477,9 +1081,10 @@ public class ChatBubbleScreen extends Screen {
 
             int penX = titleX + titleW + 3;
             int penY = ty + (TITLE_H - 9) / 2;
-            boolean hoverPen = mouseX >= penX && mouseX <= penX + 9 && mouseY >= penY && mouseY <= penY + 9;
+            boolean hoverPen = selectedContact == null && mouseX >= penX && mouseX <= penX + 9 && mouseY >= penY && mouseY <= penY + 9;
             int penColor = hoverPen ? 0xFFFFFF88 : 0xFF888888;
-            context.drawText(textRenderer, Text.literal("\u270E"), penX, penY, penColor, false);
+            if (selectedContact == null)
+                context.drawText(textRenderer, Text.literal("\u270E"), penX, penY, penColor, false);
         }
 
         String time = LocalTime.now().format(TIME_FMT);
@@ -496,11 +1101,15 @@ public class ChatBubbleScreen extends Screen {
     }
 
     private String getDisplayTitle() {
+        if (selectedContact != null) {
+            return Text.translatable("opchat.title.whisper").getString() + " " + selectedContact;
+        }
         String ct = ChatMessageStore.getCustomTitle();
         return ct != null ? ct : worldName;
     }
 
     private boolean isMouseOverPen(double mx, double my) {
+        if (selectedContact != null) return false;
         String title = getDisplayTitle();
         int titleW = textRenderer.getWidth(title);
         int titleX = panelX + (panelW - titleW) / 2;
@@ -534,10 +1143,22 @@ public class ChatBubbleScreen extends Screen {
         setFocused(input);
     }
 
+    private java.util.List<ChatMessageStore.ChatMessage> getCurrentMessages() {
+        return selectedContact != null
+            ? WhisperHistory.getAsChatMessages(selectedContact)
+            : ChatMessageStore.getMessages();
+    }
+
+    private ChatMessageStore.ChatMessage getMessageAt(int index) {
+        java.util.List<ChatMessageStore.ChatMessage> msgs = getCurrentMessages();
+        if (index >= 0 && index < msgs.size()) return msgs.get(index);
+        return null;
+    }
+
     private void renderMessages(DrawContext context, int mouseX, int mouseY) {
         bubbleRects.clear();
         clickableSpans.clear();
-        List<ChatMessageStore.ChatMessage> messages = ChatMessageStore.getMessages();
+        List<ChatMessageStore.ChatMessage> messages = getCurrentMessages();
         if (messages.isEmpty()) return;
 
         int timeSeps = 0;
@@ -673,7 +1294,14 @@ public class ChatBubbleScreen extends Screen {
 
         if (!msg.senderName().getString().isEmpty()) {
             int maxNameW = panelW - AVATAR - PAD * 2 - 20;
-            Text displayName = msg.senderName();
+            String rawName = msg.senderName().getString();
+            Text displayName;
+            if (!own) {
+                String nick = WhisperHistory.getNickname(rawName);
+                displayName = (nick != null && !nick.isEmpty()) ? Text.literal(nick) : msg.senderName();
+            } else {
+                displayName = msg.senderName();
+            }
             if (textRenderer.getWidth(displayName) > maxNameW)
                 displayName = Text.literal(textRenderer.trimToWidth(displayName.getString(), maxNameW - textRenderer.getWidth("...")) + "...");
             int nameW = textRenderer.getWidth(displayName);
@@ -732,18 +1360,20 @@ public class ChatBubbleScreen extends Screen {
         bubbleRects.add(new int[]{bubbleX, bubbleY, bubbleW, bubbleH, index});
     }
 
+    private static final java.util.Map<UUID, Identifier> skinCache = new java.util.HashMap<>();
+
     private void renderPlayerSkin(DrawContext context, UUID uuid, int x, int y) {
-        if (client.getNetworkHandler() == null) return;
-        var entry = client.getNetworkHandler().getPlayerListEntry(uuid);
-        Identifier skin;
-        if (entry != null) {
-            skin = entry.getSkinTextures().body().texturePath();
-        } else {
-            skin = Identifier.of("textures/entity/player/slim/steve.png");
+        Identifier skin = null;
+        if (client.getNetworkHandler() != null) {
+            var entry = client.getNetworkHandler().getPlayerListEntry(uuid);
+            if (entry != null) {
+                skin = entry.getSkinTextures().body().texturePath();
+                if (skin != null) skinCache.put(uuid, skin);
+            }
         }
-        // Draw head (face) — 8x8 纹理区域放大到 AVATAR x AVATAR
+        if (skin == null) skin = skinCache.get(uuid);
+        if (skin == null) skin = Identifier.of("textures/entity/player/slim/steve.png");
         context.drawTexture(RenderPipelines.GUI_TEXTURED, skin, x, y, 8.0f, 8.0f, AVATAR, AVATAR, 8, 8, 64, 64);
-        // Draw hat layer
         context.drawTexture(RenderPipelines.GUI_TEXTURED, skin, x, y, 40.0f, 8.0f, AVATAR, AVATAR, 8, 8, 64, 64);
     }
 
@@ -817,8 +1447,90 @@ public class ChatBubbleScreen extends Screen {
     }
 
     private void renderContextMenu(DrawContext context, int mouseX, int mouseY) {
+        // Contact sidebar context menu
+        if (contextMenuContact != null) {
+            int mx = contextMenuX, my = contextMenuY;
+            int menuItems = 4; // pin/hide/add-or-remove/nickname
+            int mh = CTX_ITEM_H * menuItems;
+            context.fill(mx, my, mx + CTX_MENU_W, my + mh, 0xEE2A2A2A);
+            context.fill(mx, my, mx + CTX_MENU_W, my + 1, COLOR_DIVIDER);
+            context.fill(mx, my + mh - 1, mx + CTX_MENU_W, my + mh, COLOR_DIVIDER);
+            context.fill(mx, my, mx + 1, my + mh, COLOR_DIVIDER);
+            context.fill(mx + CTX_MENU_W - 1, my, mx + CTX_MENU_W, my + mh, COLOR_DIVIDER);
+
+            boolean pinned = WhisperHistory.isPinned(contextMenuContact);
+            boolean hidden = WhisperHistory.isHidden(contextMenuContact);
+            String pinLabel = pinned ? "\u53d6\u6d88\u7f6e\u9876" : "\u7f6e\u9876";
+            String hideLabel = hidden ? "\u53d6\u6d88\u9690\u85cf" : "\u9690\u85cf";
+            String groupLabel = contextMenuContactGroupName != null
+                ? "\u79fb\u51fa\u5206\u7ec4" : "\u6dfb\u52a0\u5230\u5206\u7ec4";
+            String nickLabel = "\u8bbe\u7f6e\u5907\u6ce8";
+
+            // Item 0: pin/unpin
+            boolean hoverPin = mouseX >= mx && mouseX <= mx + CTX_MENU_W
+                && mouseY >= my && mouseY <= my + CTX_ITEM_H;
+            context.fill(mx + 1, my + 1, mx + CTX_MENU_W - 1, my + CTX_ITEM_H, hoverPin ? 0xFF4A4A4A : 0xFF3A3A3A);
+            context.drawText(textRenderer, Text.literal(pinLabel), mx + 8, my + 5, 0xFFFFFFFF, false);
+
+            context.fill(mx + 4, my + CTX_ITEM_H, mx + CTX_MENU_W - 4, my + CTX_ITEM_H + 1, 0xFF555555);
+
+            // Item 1: hide/unhide
+            boolean hoverHide = mouseX >= mx && mouseX <= mx + CTX_MENU_W
+                && mouseY >= my + CTX_ITEM_H + 1 && mouseY <= my + CTX_ITEM_H * 2;
+            context.fill(mx + 1, my + CTX_ITEM_H + 1, mx + CTX_MENU_W - 1, my + CTX_ITEM_H * 2 - 1, hoverHide ? 0xFF4A4A4A : 0xFF3A3A3A);
+            context.drawText(textRenderer, Text.literal(hideLabel), mx + 8, my + CTX_ITEM_H + 5, 0xFFFFFFFF, false);
+
+            context.fill(mx + 4, my + CTX_ITEM_H * 2, mx + CTX_MENU_W - 4, my + CTX_ITEM_H * 2 + 1, 0xFF555555);
+
+            // Item 2: add to group / remove from group
+            boolean hoverGroup = mouseX >= mx && mouseX <= mx + CTX_MENU_W
+                && mouseY >= my + CTX_ITEM_H * 2 + 1 && mouseY <= my + CTX_ITEM_H * 3;
+            if (contextMenuContactGroupName == null && hoverGroup) subMenuVisible = true;
+            context.fill(mx + 1, my + CTX_ITEM_H * 2 + 1, mx + CTX_MENU_W - 1, my + CTX_ITEM_H * 3 - 1, hoverGroup ? 0xFF4A4A4A : 0xFF3A3A3A);
+            context.drawText(textRenderer, Text.literal(groupLabel), mx + 8, my + CTX_ITEM_H * 2 + 5, 0xFFFFFFFF, false);
+            if (contextMenuContactGroupName == null) {
+                context.drawText(textRenderer, Text.literal("\u203a"), mx + CTX_MENU_W - 12, my + CTX_ITEM_H * 2 + 5, 0xFFAAAAAA, false);
+            }
+
+            context.fill(mx + 4, my + CTX_ITEM_H * 3, mx + CTX_MENU_W - 4, my + CTX_ITEM_H * 3 + 1, 0xFF555555);
+
+            // Item 3: set nickname
+            boolean hoverNick = mouseX >= mx && mouseX <= mx + CTX_MENU_W
+                && mouseY >= my + CTX_ITEM_H * 3 + 1 && mouseY <= my + mh;
+            context.fill(mx + 1, my + CTX_ITEM_H * 3 + 1, mx + CTX_MENU_W - 1, my + mh - 1, hoverNick ? 0xFF4A4A4A : 0xFF3A3A3A);
+            context.drawText(textRenderer, Text.literal(nickLabel), mx + 8, my + CTX_ITEM_H * 3 + 5, 0xFFFFFFFF, false);
+
+            // Submenu: list of groups + new group
+            if (subMenuVisible && contextMenuContactGroupName == null) {
+                int subX = mx + CTX_MENU_W;
+                int subY = my + CTX_ITEM_H * 2;
+                int subItems = ChatBubbleConfig.CONTACT_GROUPS.size() + 1;
+                int subH = CTX_ITEM_H * subItems;
+                context.fill(subX, subY, subX + CTX_SUB_W, subY + subH, 0xEE2A2A2A);
+                context.fill(subX, subY, subX + CTX_SUB_W, subY + 1, COLOR_DIVIDER);
+                context.fill(subX, subY + subH - 1, subX + CTX_SUB_W, subY + subH, COLOR_DIVIDER);
+                context.fill(subX, subY, subX + 1, subY + subH, COLOR_DIVIDER);
+                context.fill(subX + CTX_SUB_W - 1, subY, subX + CTX_SUB_W, subY + subH, COLOR_DIVIDER);
+
+                for (int i = 0; i < ChatBubbleConfig.CONTACT_GROUPS.size(); i++) {
+                    int iy = subY + i * CTX_ITEM_H;
+                    boolean hover = mouseX >= subX && mouseX <= subX + CTX_SUB_W
+                        && mouseY >= iy && mouseY <= iy + CTX_ITEM_H;
+                    context.fill(subX + 1, iy + (i > 0 ? 1 : 0), subX + CTX_SUB_W - 1, iy + CTX_ITEM_H, hover ? 0xFF4A4A4A : 0xFF3A3A3A);
+                    context.drawText(textRenderer, Text.literal(ChatBubbleConfig.CONTACT_GROUPS.get(i).name), subX + 8, iy + 5, 0xFFFFFFFF, false);
+                }
+                // New group item
+                int ny = subY + ChatBubbleConfig.CONTACT_GROUPS.size() * CTX_ITEM_H;
+                boolean hoverNew = mouseX >= subX && mouseX <= subX + CTX_SUB_W
+                    && mouseY >= ny && mouseY <= ny + CTX_ITEM_H;
+                context.fill(subX + 1, ny + 1, subX + CTX_SUB_W - 1, ny + CTX_ITEM_H, hoverNew ? 0xFF4A4A4A : 0xFF3A3A3A);
+                context.drawText(textRenderer, Text.literal("+ \u65b0\u5efa\u5206\u7ec4"), subX + 8, ny + 5, 0xFFFFFFAA, false);
+            }
+            return;
+        }
+
         if (contextMsgIndex < 0) return;
-        int menuH = CTX_ITEM_H * 2 + 2;
+        int menuH = CTX_ITEM_H * 2 + 1;
         int menuX = Math.min(contextX, panelX + panelW - CTX_W - 2);
         int menuY = contextY - menuH;
         if (menuY < msgTop) menuY = contextY + 4;
@@ -829,6 +1541,7 @@ public class ChatBubbleScreen extends Screen {
         context.fill(menuX, menuY, menuX + 1, menuY + menuH, COLOR_DIVIDER);
         context.fill(menuX + CTX_W - 1, menuY, menuX + CTX_W, menuY + menuH, COLOR_DIVIDER);
 
+        // Item 0: copy
         boolean hoverCopy = mouseX >= menuX && mouseX <= menuX + CTX_W
             && mouseY >= menuY && mouseY <= menuY + CTX_ITEM_H;
         int copyBg = hoverCopy ? 0xFF4A4A4A : 0xFF3A3A3A;
@@ -837,6 +1550,7 @@ public class ChatBubbleScreen extends Screen {
 
         context.fill(menuX + 4, menuY + CTX_ITEM_H, menuX + CTX_W - 4, menuY + CTX_ITEM_H + 1, 0xFF555555);
 
+        // Item 1: quote
         boolean hoverQuote = mouseX >= menuX && mouseX <= menuX + CTX_W
             && mouseY >= menuY + CTX_ITEM_H + 1 && mouseY <= menuY + menuH;
         int quoteBg = hoverQuote ? 0xFF4A4A4A : 0xFF3A3A3A;
@@ -844,17 +1558,107 @@ public class ChatBubbleScreen extends Screen {
         context.drawText(textRenderer, Text.translatable("opchat.context.quote"), menuX + 8, menuY + CTX_ITEM_H + 5, 0xFFFFFFFF, false);
     }
 
+    private void renderAvatarMenu(DrawContext context, int mouseX, int mouseY) {
+        int mx = avatarMenuX, my = avatarMenuY;
+        int menuItems = 3;
+        int mh = CTX_ITEM_H * menuItems;
+        context.fill(mx, my, mx + AVATAR_MENU_W, my + mh, 0xEE2A2A2A);
+        context.fill(mx, my, mx + AVATAR_MENU_W, my + 1, COLOR_DIVIDER);
+        context.fill(mx, my + mh - 1, mx + AVATAR_MENU_W, my + mh, COLOR_DIVIDER);
+        context.fill(mx, my, mx + 1, my + mh, COLOR_DIVIDER);
+        context.fill(mx + AVATAR_MENU_W - 1, my, mx + AVATAR_MENU_W, my + mh, COLOR_DIVIDER);
+
+        // Item 0: private chat
+        boolean hover0 = mouseX >= mx && mouseX <= mx + AVATAR_MENU_W
+            && mouseY >= my && mouseY <= my + CTX_ITEM_H;
+        context.fill(mx + 1, my + 1, mx + AVATAR_MENU_W - 1, my + CTX_ITEM_H, hover0 ? 0xFF4A4A4A : 0xFF3A3A3A);
+        context.drawText(textRenderer, Text.literal("\u79c1\u804a"), mx + 8, my + 5, 0xFFFFFFFF, false);
+
+        context.fill(mx + 4, my + CTX_ITEM_H, mx + AVATAR_MENU_W - 4, my + CTX_ITEM_H + 1, 0xFF555555);
+
+        // Item 1: quick commands submenu
+        boolean hover1 = mouseX >= mx && mouseX <= mx + AVATAR_MENU_W
+            && mouseY >= my + CTX_ITEM_H + 1 && mouseY <= my + CTX_ITEM_H * 2;
+        if (hover1) avatarSubMenuVisible = true;
+        context.fill(mx + 1, my + CTX_ITEM_H + 1, mx + AVATAR_MENU_W - 1, my + CTX_ITEM_H * 2 - 1, hover1 ? 0xFF4A4A4A : 0xFF3A3A3A);
+        context.drawText(textRenderer, Text.literal("\u5feb\u6377\u6307\u4ee4"), mx + 8, my + CTX_ITEM_H + 5, 0xFFFFFFFF, false);
+        context.drawText(textRenderer, Text.literal("\u203a"), mx + AVATAR_MENU_W - 12, my + CTX_ITEM_H + 5, 0xFFAAAAAA, false);
+
+        context.fill(mx + 4, my + CTX_ITEM_H * 2, mx + AVATAR_MENU_W - 4, my + CTX_ITEM_H * 2 + 1, 0xFF555555);
+
+        // Item 2: set nickname
+        boolean hover2 = mouseX >= mx && mouseX <= mx + AVATAR_MENU_W
+            && mouseY >= my + CTX_ITEM_H * 2 + 1 && mouseY <= my + mh;
+        context.fill(mx + 1, my + CTX_ITEM_H * 2 + 1, mx + AVATAR_MENU_W - 1, my + mh - 1, hover2 ? 0xFF4A4A4A : 0xFF3A3A3A);
+        context.drawText(textRenderer, Text.literal("\u8bbe\u7f6e\u5907\u6ce8"), mx + 8, my + CTX_ITEM_H * 2 + 5, 0xFFFFFFFF, false);
+
+        // Submenu: quick commands list
+        if (avatarSubMenuVisible) {
+            int subX = mx + AVATAR_MENU_W;
+            int subY = my + CTX_ITEM_H;
+            int subItems = Math.max(ChatBubbleConfig.QUICK_COMMANDS.size(), 1);
+            int subH = CTX_ITEM_H * subItems;
+            context.fill(subX, subY, subX + AVATAR_SUB_W, subY + subH, 0xEE2A2A2A);
+            context.fill(subX, subY, subX + AVATAR_SUB_W, subY + 1, COLOR_DIVIDER);
+            context.fill(subX, subY + subH - 1, subX + AVATAR_SUB_W, subY + subH, COLOR_DIVIDER);
+            context.fill(subX, subY, subX + 1, subY + subH, COLOR_DIVIDER);
+            context.fill(subX + AVATAR_SUB_W - 1, subY, subX + AVATAR_SUB_W, subY + subH, COLOR_DIVIDER);
+
+            if (ChatBubbleConfig.QUICK_COMMANDS.isEmpty()) {
+                context.drawText(textRenderer, Text.literal("(\u65e0\u5feb\u6377\u6307\u4ee4)"), subX + 8, subY + 5, 0xFF888888, false);
+            } else {
+                for (int i = 0; i < ChatBubbleConfig.QUICK_COMMANDS.size(); i++) {
+                    int iy = subY + i * CTX_ITEM_H;
+                    boolean hover = mouseX >= subX && mouseX <= subX + AVATAR_SUB_W
+                        && mouseY >= iy && mouseY <= iy + CTX_ITEM_H;
+                    context.fill(subX + 1, iy + (i > 0 ? 1 : 0), subX + AVATAR_SUB_W - 1, iy + CTX_ITEM_H, hover ? 0xFF4A4A4A : 0xFF3A3A3A);
+                    String display = ChatBubbleConfig.QUICK_COMMANDS.get(i).getDisplay();
+                    String shown = textRenderer.trimToWidth(display, AVATAR_SUB_W - 12);
+                    if (!shown.equals(display)) shown = textRenderer.trimToWidth(display, AVATAR_SUB_W - 18) + "...";
+                    context.drawText(textRenderer, Text.literal(shown), subX + 8, iy + 5, 0xFFEEEEEE, false);
+                }
+            }
+        }
+    }
+
+    private void renderNicknameEditor(DrawContext context, int mouseX, int mouseY) {
+        int nickW = 140;
+        int nickH = 36;
+        int nickX = width / 2 - nickW / 2;
+        int nickY = height / 2 - nickH / 2;
+
+        context.fill(nickX, nickY, nickX + nickW, nickY + nickH, 0xEE2A2A2A);
+        context.fill(nickX, nickY, nickX + nickW, nickY + 1, COLOR_DIVIDER);
+        context.fill(nickX, nickY + nickH - 1, nickX + nickW, nickY + nickH, COLOR_DIVIDER);
+        context.fill(nickX, nickY, nickX + 1, nickY + nickH, COLOR_DIVIDER);
+        context.fill(nickX + nickW - 1, nickY, nickX + nickW, nickY + nickH, COLOR_DIVIDER);
+
+        String target = nicknameEditTarget != null ? WhisperHistory.getDisplayName(nicknameEditTarget) : "";
+        context.drawText(textRenderer, Text.literal("\u5907\u6ce8: " + target), nickX + 6, nickY + 3, 0xFFAAAAAA, false);
+
+        int fieldX = nickX + 6;
+        int fieldY = nickY + 14;
+        int fieldW = nickW - 12;
+        int fieldH = 16;
+        context.fill(fieldX - 1, fieldY - 1, fieldX + fieldW + 1, fieldY + fieldH + 1, 0xFF555555);
+        context.fill(fieldX, fieldY, fieldX + fieldW, fieldY + fieldH, colorInputBg);
+        nicknameField.setX(fieldX);
+        nicknameField.setY(fieldY);
+        nicknameField.setWidth(fieldW);
+        nicknameField.setHeight(fieldH);
+    }
+
     private static final int REPLY_BAR_H = 18;
 
     private void renderReplyBar(DrawContext context, int mouseX, int mouseY) {
         if (replyTargetIndex < 0) return;
-        ChatMessageStore.ChatMessage target = ChatMessageStore.getMessageAt(replyTargetIndex);
+        ChatMessageStore.ChatMessage target = getMessageAt(replyTargetIndex);
         if (target == null) { replyTargetIndex = -1; return; }
 
         int notifOffset = (newMessageCount > 0) ? NOTIF_H : 0;
-        int gearX = panelX + PAD;
+        int slashX = panelX + PAD;
         int sendX = panelX + panelW - PAD - ICON_S;
-        int barX = gearX + ICON_S + 8;
+        int barX = slashX + ICON_S + 4;
         int barW = sendX - 6 - barX;
         int barY = barTop - REPLY_BAR_H - notifOffset;
 
@@ -880,9 +1684,9 @@ public class ChatBubbleScreen extends Screen {
     private boolean isMouseOverReplyCancel(double mx, double my) {
         if (replyTargetIndex < 0) return false;
         int notifOffset = (newMessageCount > 0) ? NOTIF_H : 0;
-        int gearX = panelX + PAD;
+        int slashX = panelX + PAD;
         int sendX = panelX + panelW - PAD - ICON_S;
-        int barX = gearX + ICON_S + 8;
+        int barX = slashX + ICON_S + 4;
         int barW = sendX - 6 - barX;
         int barY = barTop - REPLY_BAR_H - notifOffset;
         int cx = barX + barW - 16;
@@ -908,19 +1712,26 @@ public class ChatBubbleScreen extends Screen {
 
         int iconY = barTop + (BAR_H - ICON_S) / 2;
 
-        int gearX = panelX + PAD;
+        int slashX = panelX + PAD;
         int sendX = panelX + panelW - PAD - ICON_S;
-        int ibX = gearX + ICON_S + 8;
+        int ibX = slashX + ICON_S + 4;
         int ibY = barTop + (BAR_H - 20) / 2;
         int ibW = quickIconX - 6 - ibX;
         int ibH = 20;
         context.fill(ibX, ibY - 1, ibX + ibW, ibY, COLOR_DIVIDER);
         context.fill(ibX, ibY, ibX + ibW, ibY + ibH, colorInputBg);
 
-        boolean hoverGear = mouseX >= gearX && mouseX <= gearX + ICON_S
+        // / quick command button
+        boolean hoverSlash = mouseX >= slashX && mouseX <= slashX + ICON_S
             && mouseY >= iconY && mouseY <= iconY + ICON_S;
-        if (hoverGear) context.fill(gearX - 1, iconY - 1, gearX + ICON_S + 1, iconY + ICON_S + 1, 0xFF444444);
-        drawTextureIcon(context, TEX_GEAR, gearX, iconY, ICON_S);
+        if (hoverSlash || quickCmdPanelOpen)
+            context.fill(slashX - 1, iconY - 1, slashX + ICON_S + 1, iconY + ICON_S + 1, 0xFF444444);
+        int slashColor = (hoverSlash || quickCmdPanelOpen) ? 0xFFFFFFFF : 0xFFCCCCCC;
+        int slashTextW = textRenderer.getWidth("/");
+        context.drawText(textRenderer, Text.literal("/"),
+            slashX + (ICON_S - slashTextW) / 2,
+            iconY + (ICON_S - textRenderer.fontHeight) / 2,
+            slashColor, false);
 
         boolean hoverQuick = mouseX >= quickIconX && mouseX <= quickIconX + ICON_S
             && mouseY >= iconY && mouseY <= iconY + ICON_S;
@@ -1095,23 +1906,439 @@ public class ChatBubbleScreen extends Screen {
 
     private void sendQuickInput(String text) {
         closeQuickPanel();
-        if (text.startsWith("/"))
+        boolean isWhisper = selectedContact != null;
+        if (isWhisper) {
+            if (!isContactOnline(selectedContact)) {
+                WhisperHistory.addSystemMessage(selectedContact, "\u5bf9\u65b9\u5df2\u79bb\u7ebf");
+                return;
+            }
+            client.player.networkHandler.sendChatCommand("w " + selectedContact + " " + text);
+            WhisperHistory.addOutgoing(selectedContact, text);
+        } else if (text.startsWith("/"))
             client.player.networkHandler.sendChatCommand(text.substring(1));
         else
             client.player.networkHandler.sendChatMessage(text);
         client.inGameHud.getChatHud().addToMessageHistory(text);
 
-        ChatMessageStore.addMessage(Text.literal(text),
-            client.player.getUuid(),
-            Text.literal(client.player.getName().getString()),
-            false);
+        if (!isWhisper) {
+            ChatMessageStore.addMessage(Text.literal(text),
+                client.player.getUuid(),
+                Text.literal(client.player.getName().getString()),
+                false);
+        }
         ChatMessageStore.incrementPendingEcho(text);
 
         scrollToBottom = true;
     }
 
+    // ===== 快捷指令 (/) =====
+
+    private int[] getQuickCmdPanelBounds() {
+        int w = QUICK_CMD_PANEL_W;
+        int headerH = 22;
+        int listH = Math.max(0, ChatBubbleConfig.QUICK_COMMANDS.size()) * QUICK_CMD_ITEM_H;
+        int footerH = 6;
+        int h = headerH + listH + footerH;
+        if (quickCmdEditing) h += QUICK_CMD_FORM_H;
+        int x = slashIconX;
+        if (x + w > panelX + panelW - 2) x = panelX + panelW - w - 2;
+        if (x < panelX + 2) x = panelX + 2;
+        int y = barTop - h - 1;
+        if (y < msgTop) y = msgTop;
+        return new int[]{x, y, w, h};
+    }
+
+    private void renderQuickCmdPanel(DrawContext context, int mouseX, int mouseY) {
+        int[] b = getQuickCmdPanelBounds();
+        int px = b[0], py = b[1], pw = b[2], ph = b[3];
+
+        context.fill(px, py, px + pw, py + ph, 0xEE2A2A2A);
+        context.fill(px, py, px + pw, py + 1, COLOR_DIVIDER);
+        context.fill(px, py + ph - 1, px + pw, py + ph, COLOR_DIVIDER);
+        context.fill(px, py, px + 1, py + ph, COLOR_DIVIDER);
+        context.fill(px + pw - 1, py, px + pw, py + ph, COLOR_DIVIDER);
+
+        int headerY = py + 4;
+        context.drawText(textRenderer, Text.literal("\u5feb\u6377\u6307\u4ee4"), px + 8, headerY + 2, 0xFFFFAA00, false);
+
+        int addX = px + pw - 32 - 4;
+        int addY = headerY;
+        int addW = 32;
+        int addH = 16;
+        boolean hoverAdd = mouseX >= addX && mouseX <= addX + addW && mouseY >= addY && mouseY <= addY + addH;
+        context.fill(addX, addY, addX + addW, addY + addH, hoverAdd ? 0xFF4A4A4A : 0xFF3A3A3A);
+        String addLabel = quickCmdEditing ? "\u53d6\u6d88" : "+ \u6dfb\u52a0";
+        context.drawCenteredTextWithShadow(textRenderer, Text.literal(addLabel), addX + addW / 2, addY + 4, 0xFFFFFFFF);
+
+        int listY = headerY + 22;
+        for (int i = 0; i < ChatBubbleConfig.QUICK_COMMANDS.size(); i++) {
+            var cmd = ChatBubbleConfig.QUICK_COMMANDS.get(i);
+            int itemX = px + 4;
+            int itemY = listY + i * QUICK_CMD_ITEM_H;
+            int itemW = pw - 8;
+            int textW = itemW - 28;
+
+            boolean hoverItem = mouseX >= itemX && mouseX <= itemX + textW
+                && mouseY >= itemY && mouseY <= itemY + QUICK_CMD_ITEM_H - 2;
+            if (hoverItem) context.fill(itemX, itemY, itemX + textW, itemY + QUICK_CMD_ITEM_H - 2, 0xFF3A3A3A);
+
+            String display = cmd.getDisplay();
+            String shown = textRenderer.trimToWidth(display, textW - 8);
+            if (!shown.equals(display)) shown = textRenderer.trimToWidth(display, textW - 14) + "...";
+            context.drawText(textRenderer, Text.literal(shown), itemX + 4, itemY + 4, 0xFFEEEEEE, false);
+
+            int editX = itemX + textW + 2;
+            int editW = 12;
+            boolean hoverEdit = mouseX >= editX && mouseX <= editX + editW && mouseY >= itemY && mouseY <= itemY + QUICK_CMD_ITEM_H - 2;
+            context.fill(editX, itemY, editX + editW, itemY + QUICK_CMD_ITEM_H - 2, hoverEdit ? 0xFF444444 : 0xFF333333);
+            context.drawCenteredTextWithShadow(textRenderer, Text.literal("\u270E"), editX + editW / 2, itemY + 4, 0xFFCCCCCC);
+
+            int delX = editX + editW + 2;
+            int delW = 12;
+            boolean hoverDel = mouseX >= delX && mouseX <= delX + delW && mouseY >= itemY && mouseY <= itemY + QUICK_CMD_ITEM_H - 2;
+            context.fill(delX, itemY, delX + delW, itemY + QUICK_CMD_ITEM_H - 2, hoverDel ? 0xFF553333 : 0xFF333333);
+            context.drawCenteredTextWithShadow(textRenderer, Text.literal("\u2715"), delX + delW / 2, itemY + 4, 0xFFCCCCCC);
+        }
+
+        if (quickCmdEditing) {
+            int formY = listY + ChatBubbleConfig.QUICK_COMMANDS.size() * QUICK_CMD_ITEM_H + 4;
+            renderQuickCmdForm(context, mouseX, mouseY, px, formY, pw);
+        }
+    }
+
+    private void renderQuickCmdForm(DrawContext context, int mouseX, int mouseY, int px, int formY, int pw) {
+        context.fill(px + 4, formY - 2, px + pw - 4, formY - 1, COLOR_DIVIDER);
+
+        int dispLabelY = formY + 2;
+        context.drawText(textRenderer, Text.literal("\u663e\u793a\u540d"), px + 8, dispLabelY, 0xFF999999, false);
+        int dispFieldX = px + 8;
+        int dispFieldY = dispLabelY + 10;
+        int dispFieldW = pw - 16;
+        int dispFieldH = 16;
+        context.fill(dispFieldX - 1, dispFieldY - 1, dispFieldX + dispFieldW + 1, dispFieldY + dispFieldH + 1, 0xFF555555);
+        context.fill(dispFieldX, dispFieldY, dispFieldX + dispFieldW, dispFieldY + dispFieldH, colorInputBg);
+        quickCmdDisplayField.setX(dispFieldX);
+        quickCmdDisplayField.setY(dispFieldY);
+        quickCmdDisplayField.setWidth(dispFieldW);
+        quickCmdDisplayField.setHeight(dispFieldH);
+        quickCmdDisplayField.setVisible(true);
+
+        int cmdLabelY = dispFieldY + dispFieldH + 4;
+        context.drawText(textRenderer, Text.literal("\u6307\u4ee4"), px + 8, cmdLabelY, 0xFF999999, false);
+        int cmdFieldX = px + 8;
+        int cmdFieldY = cmdLabelY + 10;
+        int varBtnW = 28;
+        int cmdFieldW = pw - 16 - varBtnW - 4;
+        int cmdFieldH = 16;
+        context.fill(cmdFieldX - 1, cmdFieldY - 1, cmdFieldX + cmdFieldW + 1, cmdFieldY + cmdFieldH + 1, 0xFF555555);
+        context.fill(cmdFieldX, cmdFieldY, cmdFieldX + cmdFieldW, cmdFieldY + cmdFieldH, colorInputBg);
+        quickCmdCommandField.setX(cmdFieldX);
+        quickCmdCommandField.setY(cmdFieldY);
+        quickCmdCommandField.setWidth(cmdFieldW);
+        quickCmdCommandField.setHeight(cmdFieldH);
+        quickCmdCommandField.setVisible(true);
+
+        int varBtnX = cmdFieldX + cmdFieldW + 4;
+        boolean hoverVar = mouseX >= varBtnX && mouseX <= varBtnX + varBtnW && mouseY >= cmdFieldY && mouseY <= cmdFieldY + cmdFieldH;
+        context.fill(varBtnX, cmdFieldY, varBtnX + varBtnW, cmdFieldY + cmdFieldH, hoverVar ? 0xFF4A4A4A : 0xFF3A3A3A);
+        context.drawCenteredTextWithShadow(textRenderer, Text.literal("@*"), varBtnX + varBtnW / 2, cmdFieldY + 4, 0xFFFFFFAA);
+
+        int saveY = cmdFieldY + cmdFieldH + 6;
+        int btnW = (pw - 20) / 2;
+        int saveX = px + 8;
+        boolean hoverSave = mouseX >= saveX && mouseX <= saveX + btnW && mouseY >= saveY && mouseY <= saveY + 16;
+        context.fill(saveX, saveY, saveX + btnW, saveY + 16, hoverSave ? 0xFF4A7A4A : 0xFF3A5A3A);
+        context.drawCenteredTextWithShadow(textRenderer, Text.literal("\u4fdd\u5b58"), saveX + btnW / 2, saveY + 4, 0xFFFFFFFF);
+
+        int cancelX = saveX + btnW + 4;
+        boolean hoverCancel = mouseX >= cancelX && mouseX <= cancelX + btnW && mouseY >= saveY && mouseY <= saveY + 16;
+        context.fill(cancelX, saveY, cancelX + btnW, saveY + 16, hoverCancel ? 0xFF7A4A4A : 0xFF5A3A3A);
+        context.drawCenteredTextWithShadow(textRenderer, Text.literal("\u53d6\u6d88"), cancelX + btnW / 2, saveY + 4, 0xFFFFFFFF);
+    }
+
+    private void handleQuickCmdPanelClick(int mx, int my) {
+        int[] b = getQuickCmdPanelBounds();
+        int px = b[0], py = b[1], pw = b[2];
+
+        int headerY = py + 4;
+        int addX = px + pw - 32 - 4;
+        int addY = headerY;
+        int addW = 32;
+        int addH = 16;
+
+        if (mx >= addX && mx <= addX + addW && my >= addY && my <= addY + addH) {
+            if (quickCmdEditing) {
+                quickCmdEditing = false;
+                quickCmdDisplayField.setVisible(false);
+                quickCmdCommandField.setVisible(false);
+                if (quickCmdSuggestor != null) quickCmdSuggestor.clearWindow();
+                input.setFocused(true);
+                setFocused(input);
+            } else {
+                quickCmdEditing = true;
+                quickCmdEditIndex = -1;
+                quickCmdDisplayField.setText("");
+                quickCmdCommandField.setText("");
+                quickCmdDisplayField.setVisible(true);
+                quickCmdCommandField.setVisible(true);
+                quickCmdCommandField.setFocused(true);
+                setFocused(quickCmdCommandField);
+            }
+            return;
+        }
+
+        int listY = headerY + 22;
+        for (int i = 0; i < ChatBubbleConfig.QUICK_COMMANDS.size(); i++) {
+            int itemX = px + 4;
+            int itemY = listY + i * QUICK_CMD_ITEM_H;
+            int itemW = pw - 8;
+            int textW = itemW - 28;
+            int editX = itemX + textW + 2;
+            int editW = 12;
+            int delX = editX + editW + 2;
+            int delW = 12;
+
+            if (mx >= delX && mx <= delX + delW && my >= itemY && my <= itemY + QUICK_CMD_ITEM_H - 2) {
+                ChatBubbleConfig.QUICK_COMMANDS.remove(i);
+                ChatBubbleConfig.save();
+                return;
+            }
+
+            if (mx >= editX && mx <= editX + editW && my >= itemY && my <= itemY + QUICK_CMD_ITEM_H - 2) {
+                var cmd = ChatBubbleConfig.QUICK_COMMANDS.get(i);
+                quickCmdEditing = true;
+                quickCmdEditIndex = i;
+                quickCmdDisplayField.setText(cmd.display);
+                quickCmdCommandField.setText(cmd.command);
+                quickCmdDisplayField.setVisible(true);
+                quickCmdCommandField.setVisible(true);
+                quickCmdCommandField.setFocused(true);
+                setFocused(quickCmdCommandField);
+                return;
+            }
+
+            if (mx >= itemX && mx <= itemX + textW && my >= itemY && my <= itemY + QUICK_CMD_ITEM_H - 2) {
+                executeQuickCommand(ChatBubbleConfig.QUICK_COMMANDS.get(i));
+                return;
+            }
+        }
+
+        if (quickCmdEditing) {
+            int formY = listY + ChatBubbleConfig.QUICK_COMMANDS.size() * QUICK_CMD_ITEM_H + 4;
+            handleQuickCmdFormClick(mx, my, px, formY, pw);
+            return;
+        }
+
+        quickCmdDisplayField.setFocused(false);
+        quickCmdCommandField.setFocused(false);
+    }
+
+    private void handleQuickCmdFormClick(int mx, int my, int px, int formY, int pw) {
+        int dispLabelY = formY + 2;
+        int dispFieldX = px + 8;
+        int dispFieldY = dispLabelY + 10;
+        int dispFieldW = pw - 16;
+        int dispFieldH = 16;
+
+        if (mx >= dispFieldX && mx <= dispFieldX + dispFieldW && my >= dispFieldY && my <= dispFieldY + dispFieldH) {
+            quickCmdDisplayField.setFocused(true);
+            setFocused(quickCmdDisplayField);
+            return;
+        }
+
+        int cmdLabelY = dispFieldY + dispFieldH + 4;
+        int cmdFieldX = px + 8;
+        int cmdFieldY = cmdLabelY + 10;
+        int varBtnW = 28;
+        int cmdFieldW = pw - 16 - varBtnW - 4;
+        int cmdFieldH = 16;
+
+        if (mx >= cmdFieldX && mx <= cmdFieldX + cmdFieldW && my >= cmdFieldY && my <= cmdFieldY + cmdFieldH) {
+            quickCmdCommandField.setFocused(true);
+            setFocused(quickCmdCommandField);
+            if (quickCmdSuggestor != null) {
+                String t = quickCmdCommandField.getText();
+                quickCmdSuggestor.setWindowActive(t.startsWith("/"));
+                quickCmdSuggestor.refresh();
+            }
+            return;
+        }
+
+        int varBtnX = cmdFieldX + cmdFieldW + 4;
+        if (mx >= varBtnX && mx <= varBtnX + varBtnW && my >= cmdFieldY && my <= cmdFieldY + cmdFieldH) {
+            String cur = quickCmdCommandField.getText();
+            quickCmdCommandField.setText(cur + "@*");
+            quickCmdCommandField.setCursorToEnd(false);
+            quickCmdCommandField.setFocused(true);
+            setFocused(quickCmdCommandField);
+            return;
+        }
+
+        int saveY = cmdFieldY + cmdFieldH + 6;
+        int btnW = (pw - 20) / 2;
+        int saveX = px + 8;
+        if (mx >= saveX && mx <= saveX + btnW && my >= saveY && my <= saveY + 16) {
+            saveQuickCommand();
+            return;
+        }
+
+        int cancelX = saveX + btnW + 4;
+        if (mx >= cancelX && mx <= cancelX + btnW && my >= saveY && my <= saveY + 16) {
+            quickCmdEditing = false;
+            quickCmdDisplayField.setVisible(false);
+            quickCmdCommandField.setVisible(false);
+            if (quickCmdSuggestor != null) quickCmdSuggestor.clearWindow();
+            input.setFocused(true);
+            setFocused(input);
+            return;
+        }
+
+        quickCmdDisplayField.setFocused(false);
+        quickCmdCommandField.setFocused(false);
+    }
+
+    private void saveQuickCommand() {
+        String display = quickCmdDisplayField.getText().trim();
+        String command = quickCmdCommandField.getText().trim();
+        if (command.isEmpty()) {
+            quickCmdEditing = false;
+            quickCmdDisplayField.setVisible(false);
+            quickCmdCommandField.setVisible(false);
+            if (quickCmdSuggestor != null) quickCmdSuggestor.clearWindow();
+            input.setFocused(true);
+            setFocused(input);
+            return;
+        }
+
+        if (quickCmdEditIndex >= 0 && quickCmdEditIndex < ChatBubbleConfig.QUICK_COMMANDS.size()) {
+            var cmd = ChatBubbleConfig.QUICK_COMMANDS.get(quickCmdEditIndex);
+            cmd.display = display;
+            cmd.command = command;
+        } else {
+            ChatBubbleConfig.QUICK_COMMANDS.add(new ChatBubbleConfig.QuickCommand(display, command));
+        }
+        ChatBubbleConfig.save();
+
+        quickCmdEditing = false;
+        quickCmdEditIndex = -1;
+        quickCmdDisplayField.setVisible(false);
+        quickCmdCommandField.setVisible(false);
+        quickCmdDisplayField.setText("");
+        quickCmdCommandField.setText("");
+        if (quickCmdSuggestor != null) quickCmdSuggestor.clearWindow();
+        input.setFocused(true);
+        setFocused(input);
+    }
+
+    private void toggleQuickCmdPanel() {
+        if (quickCmdPanelOpen) {
+            closeQuickCmdPanel();
+        } else {
+            quickCmdPanelOpen = true;
+            quickCmdEditing = false;
+            quickCmdDisplayField.setVisible(false);
+            quickCmdCommandField.setVisible(false);
+            input.setFocused(true);
+            setFocused(input);
+        }
+    }
+
+    private void closeQuickCmdPanel() {
+        quickCmdPanelOpen = false;
+        quickCmdEditing = false;
+        quickCmdDisplayField.setVisible(false);
+        quickCmdCommandField.setVisible(false);
+        if (quickCmdSuggestor != null) quickCmdSuggestor.clearWindow();
+        input.setFocused(true);
+        setFocused(input);
+    }
+
+    private void executeQuickCommand(ChatBubbleConfig.QuickCommand cmd) {
+        String command = cmd.command;
+        closeQuickCmdPanel();
+
+        // Public chat with @*: place command in input box and trigger suggestions
+        // instead of sending, so the user can pick a player name from completions.
+        if (selectedContact == null && command.contains("@*")) {
+            int idx = command.indexOf("@*");
+            String before = command.substring(0, idx);
+            String after = command.substring(idx + 2).replace("@*", "");
+            input.setText(before + after);
+            input.setFocused(true);
+            setFocused(input);
+            input.setCursorToEnd(false);
+            if (command.startsWith("/")) {
+                commandSuggestions.setWindowActive(true);
+                commandSuggestions.refresh();
+            }
+            return;
+        }
+
+        // Replace @* with current whisper target if present
+        if (selectedContact != null) {
+            command = command.replace("@*", selectedContact);
+        }
+
+        // Quick commands are always executed as server commands, never routed through whisper text
+        if (command.startsWith("/")) {
+            client.player.networkHandler.sendChatCommand(command.substring(1));
+        } else {
+            client.player.networkHandler.sendChatMessage(command);
+        }
+        client.inGameHud.getChatHud().addToMessageHistory(command);
+
+        // Show the command in the current chat history
+        if (client.player != null) {
+            Text cmdText = Text.literal(command);
+            if (selectedContact != null) {
+                WhisperHistory.addOutgoing(selectedContact, command);
+            } else {
+                ChatMessageStore.addMessage(cmdText, client.player.getUuid(), client.player.getName(), false);
+            }
+            scrollToBottom = true;
+        }
+    }
+
+    private void executeQuickCommandForPlayer(ChatBubbleConfig.QuickCommand cmd, String player) {
+        String command = cmd.command;
+        if (player != null) {
+            command = command.replace("@*", player);
+        }
+        if (command.startsWith("/")) {
+            client.player.networkHandler.sendChatCommand(command.substring(1));
+        } else {
+            client.player.networkHandler.sendChatMessage(command);
+        }
+        client.inGameHud.getChatHud().addToMessageHistory(command);
+        if (client.player != null) {
+            ChatMessageStore.addMessage(Text.literal(command), client.player.getUuid(), client.player.getName(), false);
+            scrollToBottom = true;
+        }
+    }
+
+    private void openNicknameEditor(String target) {
+        nicknameEditTarget = target;
+        String current = WhisperHistory.getNickname(target);
+        nicknameField.setText(current != null ? current : "");
+        nicknameField.setVisible(true);
+        nicknameField.setFocused(true);
+        setFocused(nicknameField);
+        editingNickname = true;
+    }
+
+    private void saveNickname() {
+        String nick = nicknameField.getText().trim();
+        if (nicknameEditTarget != null) {
+            WhisperHistory.setNickname(nicknameEditTarget, nick);
+        }
+        editingNickname = false;
+        nicknameField.setVisible(false);
+        input.setFocused(true);
+        setFocused(input);
+    }
+
     private void jumpToMessage(int msgIndex) {
-        var msgs = ChatMessageStore.getMessages();
+        var msgs = getCurrentMessages();
         if (msgIndex < 0 || msgIndex >= msgs.size()) return;
         int cy = 0;
         String lk = null;
@@ -1133,12 +2360,20 @@ public class ChatBubbleScreen extends Screen {
         lastSeenMessageCount = msgs.size();
     }
 
+    private boolean isContactOnline(String name) {
+        if (client.getNetworkHandler() == null) return false;
+        for (var entry : client.getNetworkHandler().getPlayerList()) {
+            if (entry.getProfile().name().equals(name)) return true;
+        }
+        return false;
+    }
+
     private void sendMessage() {
         String text = input.getText().trim();
         if (text.isEmpty()) return;
 
         if (replyTargetIndex >= 0) {
-            ChatMessageStore.ChatMessage target = ChatMessageStore.getMessageAt(replyTargetIndex);
+            ChatMessageStore.ChatMessage target = getMessageAt(replyTargetIndex);
             if (target != null) {
                 ChatMessageStore.setPendingReply(target.content().getString(), target.senderName().getString());
                 QuoteSyncPacket.send(target.senderName().getString(), target.content().getString(), text);
@@ -1146,16 +2381,28 @@ public class ChatBubbleScreen extends Screen {
             replyTargetIndex = -1;
         }
 
-        if (text.startsWith("/"))
+        boolean isWhisper = selectedContact != null;
+        if (isWhisper) {
+            if (!isContactOnline(selectedContact)) {
+                WhisperHistory.addSystemMessage(selectedContact, "\u5bf9\u65b9\u5df2\u79bb\u7ebf");
+                input.setText("");
+                scrollToBottom = true;
+                return;
+            }
+            client.player.networkHandler.sendChatCommand("w " + selectedContact + " " + text);
+            WhisperHistory.addOutgoing(selectedContact, text);
+        } else if (text.startsWith("/"))
             client.player.networkHandler.sendChatCommand(text.substring(1));
         else
             client.player.networkHandler.sendChatMessage(text);
         client.inGameHud.getChatHud().addToMessageHistory(text);
 
-        ChatMessageStore.addMessage(Text.literal(text),
-            client.player.getUuid(),
-            Text.literal(client.player.getName().getString()),
-            false);
+        if (!isWhisper) {
+            ChatMessageStore.addMessage(Text.literal(text),
+                client.player.getUuid(),
+                Text.literal(client.player.getName().getString()),
+                false);
+        }
         ChatMessageStore.incrementPendingEcho(text);
 
         input.setText("");
@@ -1183,6 +2430,10 @@ public class ChatBubbleScreen extends Screen {
         ChatMessageStore.setScreenOpen(false);
         client.inGameHud.getChatHud().resetScroll();
         quickPanelOpen = false;
+        quickCmdPanelOpen = false;
+        avatarMenuPlayer = null;
+        avatarSubMenuVisible = false;
+        editingNickname = false;
         ChatBubbleConfig.save();
     }
 
@@ -1190,6 +2441,10 @@ public class ChatBubbleScreen extends Screen {
     public void close() {
         if (quickPanelOpen) {
             closeQuickPanel();
+            return;
+        }
+        if (quickCmdPanelOpen) {
+            closeQuickCmdPanel();
             return;
         }
         if (!ChatBubbleConfig.ANIMATION_ENABLED) {

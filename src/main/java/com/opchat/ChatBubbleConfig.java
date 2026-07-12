@@ -9,7 +9,10 @@ import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
+import java.util.Set;
 
 public class ChatBubbleConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
@@ -25,6 +28,7 @@ public class ChatBubbleConfig {
     public static boolean SYSTEM_CHAT_AS_BUBBLE = false;
     public static boolean ANTI_SPAM = false;
     public static boolean CHAT_REPORT_COMPAT = false;
+    public static int WHISPER_HISTORY_DAYS = 30;
     public static boolean PREVIEW_ENABLED = true;
     public static int PREVIEW_LINES = 2;
     public static int PREVIEW_WIDTH = 150;
@@ -33,6 +37,121 @@ public class ChatBubbleConfig {
     public static String OWN_TEXT_COLOR = "#0A0A0A";
     public static String OTHER_TEXT_COLOR = "#FFFFFF";
     public static List<String> QUICK_INPUTS = new ArrayList<>();
+    public static List<QuickCommand> QUICK_COMMANDS = new ArrayList<>();
+    public static List<ContactGroup> CONTACT_GROUPS = new ArrayList<>(List.of(
+        new ContactGroup("假人", List.of(), List.of("bot_", "Bot_", "BOT_"))
+    ));
+
+    public static class QuickCommand {
+        public String display = "";
+        public String command = "";
+
+        public QuickCommand() {}
+
+        public QuickCommand(String display, String command) {
+            this.display = display != null ? display : "";
+            this.command = command != null ? command : "";
+        }
+
+        public String getDisplay() {
+            return (display == null || display.isEmpty()) ? command : display;
+        }
+    }
+
+    public static class ContactGroup {
+        public String name = "";
+        public List<String> members = new ArrayList<>();
+        public List<String> prefixes = new ArrayList<>();
+        public transient boolean expanded = false;
+
+        public ContactGroup() {}
+
+        public ContactGroup(String name, List<String> members, List<String> prefixes) {
+            this.name = name;
+            this.members = members != null ? new ArrayList<>(members) : new ArrayList<>();
+            this.prefixes = prefixes != null ? new ArrayList<>(prefixes) : new ArrayList<>();
+        }
+
+        public boolean matches(String playerName) {
+            if (playerName == null || playerName.isEmpty()) return false;
+            if (members.contains(playerName)) return true;
+            for (String prefix : prefixes) {
+                if (prefix != null && !prefix.isEmpty() && playerName.startsWith(prefix)) return true;
+            }
+            return false;
+        }
+    }
+
+    public static ContactGroup getGroupOf(String name) {
+        if (name == null || name.isEmpty()) return null;
+        for (var group : CONTACT_GROUPS) {
+            if (group.matches(name)) return group;
+        }
+        return null;
+    }
+
+    public static boolean isGroupContact(String name) {
+        return getGroupOf(name) != null;
+    }
+
+    public static void addToGroup(String groupName, String contactName) {
+        if (groupName == null || groupName.isEmpty() || contactName == null || contactName.isEmpty()) return;
+        for (var group : CONTACT_GROUPS) {
+            if (group.name.equals(groupName)) {
+                if (!group.members.contains(contactName)) {
+                    group.members.add(contactName);
+                }
+                save();
+                return;
+            }
+        }
+    }
+
+    public static void removeFromGroup(String groupName, String contactName) {
+        if (groupName == null || groupName.isEmpty() || contactName == null || contactName.isEmpty()) return;
+        for (var group : CONTACT_GROUPS) {
+            if (group.name.equals(groupName)) {
+                group.members.remove(contactName);
+                save();
+                return;
+            }
+        }
+    }
+
+    public static void addGroup(String name) {
+        if (name == null || name.isEmpty()) return;
+        for (var group : CONTACT_GROUPS) {
+            if (group.name.equals(name)) return;
+        }
+        CONTACT_GROUPS.add(new ContactGroup(name, List.of(), List.of()));
+        save();
+    }
+
+    public static void removeGroup(String name) {
+        CONTACT_GROUPS.removeIf(g -> g.name.equals(name));
+        save();
+    }
+
+    public static List<String> getGroupOnlineMembers(ContactGroup group, Set<String> onlineSet) {
+        List<String> result = new ArrayList<>();
+        if (group == null) return result;
+        for (String name : group.members) {
+            if (onlineSet.contains(name)) result.add(name);
+        }
+        for (String name : onlineSet) {
+            if (group.members.contains(name)) continue;
+            boolean prefixMatch = false;
+            for (String prefix : group.prefixes) {
+                if (prefix != null && !prefix.isEmpty() && name.startsWith(prefix)) {
+                    prefixMatch = true;
+                    break;
+                }
+            }
+            if (prefixMatch) result.add(name);
+        }
+        Collections.sort(result);
+        return result;
+    }
 
     private static ConfigData data = new ConfigData();
 
@@ -71,6 +190,7 @@ public class ChatBubbleConfig {
         SYSTEM_CHAT_AS_BUBBLE = data.system_chat_as_bubble;
         ANTI_SPAM = data.anti_spam;
         CHAT_REPORT_COMPAT = data.chat_report_compat;
+        WHISPER_HISTORY_DAYS = data.whisper_history_days;
         PREVIEW_ENABLED = data.preview_enabled;
         PREVIEW_LINES = data.preview_lines;
         PREVIEW_WIDTH = data.preview_width;
@@ -79,6 +199,10 @@ public class ChatBubbleConfig {
         OWN_TEXT_COLOR = data.own_text_color;
         OTHER_TEXT_COLOR = data.other_text_color;
         QUICK_INPUTS = data.quick_inputs != null ? new ArrayList<>(data.quick_inputs) : new ArrayList<>();
+        QUICK_COMMANDS = data.quick_commands != null ? new ArrayList<>(data.quick_commands) : new ArrayList<>();
+        CONTACT_GROUPS = data.contact_groups != null ? new ArrayList<>(data.contact_groups) : new ArrayList<>(List.of(
+            new ContactGroup("假人", List.of(), List.of("bot_", "Bot_", "BOT_"))
+        ));
     }
 
     private static void updateData() {
@@ -91,6 +215,7 @@ public class ChatBubbleConfig {
         data.system_chat_as_bubble = SYSTEM_CHAT_AS_BUBBLE;
         data.anti_spam = ANTI_SPAM;
         data.chat_report_compat = CHAT_REPORT_COMPAT;
+        data.whisper_history_days = WHISPER_HISTORY_DAYS;
         data.preview_enabled = PREVIEW_ENABLED;
         data.preview_lines = PREVIEW_LINES;
         data.preview_width = PREVIEW_WIDTH;
@@ -99,6 +224,8 @@ public class ChatBubbleConfig {
         data.own_text_color = OWN_TEXT_COLOR;
         data.other_text_color = OTHER_TEXT_COLOR;
         data.quick_inputs = QUICK_INPUTS;
+        data.quick_commands = QUICK_COMMANDS;
+        data.contact_groups = CONTACT_GROUPS;
     }
 
     public static int parseHexColor(String hex, int defaultColor) {
@@ -121,6 +248,7 @@ public class ChatBubbleConfig {
         boolean system_chat_as_bubble = false;
         boolean anti_spam = false;
         boolean chat_report_compat = false;
+        int whisper_history_days = 30;
         boolean preview_enabled = true;
         int preview_lines = 2;
         int preview_width = 150;
@@ -129,5 +257,9 @@ public class ChatBubbleConfig {
         String own_text_color = "#0A0A0A";
         String other_text_color = "#FFFFFF";
         List<String> quick_inputs = new ArrayList<>();
+        List<QuickCommand> quick_commands = new ArrayList<>();
+        List<ContactGroup> contact_groups = new ArrayList<>(List.of(
+            new ContactGroup("假人", List.of(), List.of("bot_", "Bot_", "BOT_"))
+        ));
     }
 }
