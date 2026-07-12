@@ -18,10 +18,9 @@ import java.util.UUID;
 public class ChatListenerMixin {
 
     @Inject(method = "onChatMessage", at = @At("HEAD"))
-    private void onPlayerChat(String message, GameProfile senderProfile, MessageType.Parameters params, CallbackInfo ci) {
+    private void onPlayerChat(Text message, GameProfile senderProfile, MessageType.Parameters params, CallbackInfo ci) {
         UUID senderId = senderProfile.getId();
-        Text raw = Text.literal(message);
-        String rawStr = raw.getString();
+        String rawStr = message.getString();
         if (rawStr.startsWith("xaero-waypoint:")
             || rawStr.startsWith("xaero_waypoint:")
             || rawStr.startsWith("xaero_waypoint_add:")) {
@@ -30,7 +29,7 @@ public class ChatListenerMixin {
         ChatMessageStore.setPendingMeta(new SenderMeta(
             senderId != null ? senderId : new UUID(0, 0),
             Text.literal(senderProfile.getName()),
-            raw,
+            message,
             false
         ));
     }
