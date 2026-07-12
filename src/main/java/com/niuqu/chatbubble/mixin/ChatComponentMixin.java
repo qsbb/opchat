@@ -17,20 +17,20 @@ import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 @Mixin(value = ChatHud.class, priority = 500)
 public class ChatComponentMixin {
 
-    @Inject(method = "render", at = @At("HEAD"), cancellable = true)
+    @Inject(method = "render", at = @At("HEAD"), cancellable = true, require = 0)
     private void onRender(DrawContext context, int currentTick, int mouseX, int mouseY, CallbackInfo ci) {
         if (ChatBubbleConfig.ENABLED) {
             ci.cancel();
         }
     }
 
-    @Inject(method = "addMessage(Lnet/minecraft/text/Text;)V", at = @At("HEAD"))
+    @Inject(method = "addMessage(Lnet/minecraft/text/Text;)V", at = @At("HEAD"), require = 0)
     private void onAddMessage(Text message, CallbackInfo ci) {
         captureMessage(message);
     }
 
     @Inject(method = "addMessage(Lnet/minecraft/text/Text;Lnet/minecraft/network/message/MessageSignatureData;Lnet/minecraft/client/gui/hud/MessageIndicator;)V",
-            at = @At("HEAD"))
+            at = @At("HEAD"), require = 0)
     private void onAddMessageFull(Text message, MessageSignatureData signature,
                                    MessageIndicator tag, CallbackInfo ci) {
         captureMessage(message);
