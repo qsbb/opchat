@@ -87,8 +87,8 @@ public class ChatMessageStore {
         var connection = player.networkHandler;
         if (connection == null) return new UUID(0, 0);
         for (var info : connection.getPlayerList()) {
-            if (info.getProfile().getName().equals(name))
-                return info.getProfile().getId();
+            if (info.getProfile().name().equals(name))
+                return info.getProfile().id();
         }
         return new UUID(0, 0);
     }

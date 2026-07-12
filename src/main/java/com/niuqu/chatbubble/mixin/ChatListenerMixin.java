@@ -20,7 +20,7 @@ public class ChatListenerMixin {
 
     @Inject(method = "onChatMessage", at = @At("HEAD"))
     private void onPlayerChat(SignedMessage signedMessage, GameProfile senderProfile, MessageType.Parameters params, CallbackInfo ci) {
-        UUID senderId = senderProfile.getId();
+        UUID senderId = senderProfile.id();
         Text message = signedMessage.getContent();
         String rawStr = message.getString();
         if (rawStr.startsWith("xaero-waypoint:")
@@ -30,7 +30,7 @@ public class ChatListenerMixin {
         }
         ChatMessageStore.setPendingMeta(new SenderMeta(
             senderId != null ? senderId : new UUID(0, 0),
-            Text.literal(senderProfile.getName()),
+            Text.literal(senderProfile.name()),
             message,
             false
         ));

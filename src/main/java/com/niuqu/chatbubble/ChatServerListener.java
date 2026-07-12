@@ -24,7 +24,7 @@ public class ChatServerListener {
     public static void onServerChat(ServerPlayerEntity player, String rawText) {
         String messageHash = String.valueOf(rawText.hashCode());
 
-        List<String> mentions = extractMentions(rawText, player.getServer().getPlayerManager().getPlayerList().size());
+        List<String> mentions = extractMentions(rawText, player.getEntityWorld().getServer().getPlayerManager().getPlayerList().size());
 
         QuotePending quote = pendingQuotes.remove(player.getUuid());
         String quoteSender = quote != null ? quote.quotedSenderName() : "";
@@ -34,7 +34,7 @@ public class ChatServerListener {
             ChatMetaPacket meta = new ChatMetaPacket(
                 player.getUuid(), messageHash, quoteSender, quoteContent, mentions);
             // Send to all players
-            for (ServerPlayerEntity target : player.getServer().getPlayerManager().getPlayerList()) {
+            for (ServerPlayerEntity target : player.getEntityWorld().getServer().getPlayerManager().getPlayerList()) {
                 ServerPlayNetworking.send(target, meta);
             }
         }

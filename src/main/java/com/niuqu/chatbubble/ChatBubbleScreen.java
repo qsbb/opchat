@@ -2,14 +2,15 @@ package com.niuqu.chatbubble;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gl.RenderPipelines;
+import net.minecraft.client.gui.Click;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.screen.ChatInputSuggestor;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.client.render.GameRenderer;
+import net.minecraft.client.input.KeyInput;
 import net.minecraft.client.texture.NativeImage;
 import net.minecraft.client.texture.NativeImageBackedTexture;
-import net.minecraft.client.texture.AbstractTexture;
 
 import net.minecraft.text.ClickEvent;
 import net.minecraft.text.MutableText;
@@ -188,13 +189,14 @@ public class ChatBubbleScreen extends Screen {
     }
 
     @Override
-    public boolean keyPressed(int keyCode, int scanCode, int modifiers) {
+    public boolean keyPressed(KeyInput keyInput) {
+        int keyCode = keyInput.key();
         if (editingTitle) {
             if (keyCode == 256) { exitTitleEdit(false); return true; }
             if (keyCode == 257 || keyCode == 335) { exitTitleEdit(true); return true; }
-            return titleEditor.keyPressed(keyCode, scanCode, modifiers);
+            return titleEditor.keyPressed(keyInput);
         }
-        if (commandSuggestions != null && commandSuggestions.keyPressed(keyCode, scanCode, modifiers))
+        if (commandSuggestions != null && commandSuggestions.keyPressed(keyInput))
             return true;
         if (keyCode == 256) { close(); return true; }
         if (keyCode == 257 || keyCode == 335) {
@@ -204,7 +206,7 @@ public class ChatBubbleScreen extends Screen {
         }
         if (keyCode == 265) { moveInHistory(-1); return true; }
         if (keyCode == 264) { moveInHistory(1); return true; }
-        return super.keyPressed(keyCode, scanCode, modifiers);
+        return super.keyPressed(keyInput);
     }
 
     @Override
@@ -218,7 +220,10 @@ public class ChatBubbleScreen extends Screen {
     }
 
     @Override
-    public boolean mouseClicked(double mouseX, double mouseY, int button) {
+    public boolean mouseClicked(Click click, boolean bl) {
+        int button = click.button();
+        double mouseX = click.x();
+        double mouseY = click.y();
         // Context menu clicks
         if (button == 0 && contextMsgIndex >= 0) {
             handleContextClick((int) mouseX, (int) mouseY);
@@ -251,7 +256,7 @@ public class ChatBubbleScreen extends Screen {
             return true;
         }
 
-        if (commandSuggestions != null && commandSuggestions.mouseClicked((int) mouseX, (int) mouseY, button))
+        if (commandSuggestions != null && commandSuggestions.mouseClicked(click))
             return true;
 
         if (button == 0) {
@@ -260,7 +265,7 @@ public class ChatBubbleScreen extends Screen {
                     exitTitleEdit(true);
                     return true;
                 }
-                return super.mouseClicked(mouseX, mouseY, button);
+                return super.mouseClicked(click, bl);
             }
             if (isMouseOverPen(mouseX, mouseY)) {
                 enterTitleEdit();
@@ -307,20 +312,20 @@ public class ChatBubbleScreen extends Screen {
         if (button == 0) {
             Style style = getHoveredStyle(mouseX, mouseY);
             if (style != null && style.getClickEvent() != null) {
-                ClickEvent click = style.getClickEvent();
-                if (click.getAction() == ClickEvent.Action.SUGGEST_COMMAND) {
-                    input.setText(click.getValue());
+                ClickEvent clickEvent = style.getClickEvent();
+                if (clickEvent instanceof ClickEvent.SuggestCommand sc) {
+                    input.setText(sc.command());
                     return true;
                 }
-                handleTextClick(style);
-                if (click.getAction() != ClickEvent.Action.COPY_TO_CLIPBOARD
-                    && click.getAction() != ClickEvent.Action.OPEN_URL) {
+                Screen.handleBasicClickEvent(clickEvent, client, this);
+                if (clickEvent.getAction() != ClickEvent.Action.COPY_TO_CLIPBOARD
+                    && clickEvent.getAction() != ClickEvent.Action.OPEN_URL) {
                     client.setScreen(null);
                 }
                 return true;
             }
         }
-        return super.mouseClicked(mouseX, mouseY, button);
+        return super.mouseClicked(click, bl);
     }
 
     private boolean handleIconClick(int mx, int my) {
@@ -669,14 +674,14 @@ public class ChatBubbleScreen extends Screen {
         var entry = client.getNetworkHandler().getPlayerListEntry(uuid);
         Identifier skin;
         if (entry != null) {
-            skin = entry.getSkinTextures().texture();
+            skin = entry.getSkinTextures().body().texturePath();
         } else {
             skin = Identifier.of("textures/entity/player/slim/steve.png");
         }
         // Draw head (face)
-        context.drawTexture(skin, x, y, 8, 8, 8, 8, 64, 64);
+        context.drawTexture(RenderPipelines.GUI_TEXTURED, skin, x, y, 8.0f, 8.0f, 8, 8, 64, 64);
         // Draw hat layer
-        context.drawTexture(skin, x, y, 40, 8, 8, 8, 64, 64);
+        context.drawTexture(RenderPipelines.GUI_TEXTURED, skin, x, y, 40.0f, 8.0f, 8, 8, 64, 64);
     }
 
     private void renderLineWithClicks(DrawContext context, OrderedText line,
@@ -869,7 +874,7 @@ public class ChatBubbleScreen extends Screen {
         try (InputStream in = getClass().getClassLoader().getResourceAsStream(classpath)) {
             if (in != null) {
                 NativeImage img = NativeImage.read(in);
-                NativeImageBackedTexture tex = new NativeImageBackedTexture(img);
+                NativeImageBackedTexture tex = new NativeImageBackedTexture(() -> loc.getPath(), img);
                 client.getTextureManager().registerTexture(loc, tex);
             }
         } catch (Exception e) {
@@ -878,10 +883,7 @@ public class ChatBubbleScreen extends Screen {
     }
 
     private void drawTextureIcon(DrawContext context, Identifier tex, int x, int y, int size) {
-        RenderSystem.setShaderTexture(0, client.getTextureManager().getTexture(tex).getGlId());
-        RenderSystem.setShader(GameRenderer::getPositionTexProgram);
-        RenderSystem.enableBlend();
-        context.drawTexture(tex, x, y, 0, 0, size, size, size, size);
+        context.drawTexture(RenderPipelines.GUI_TEXTURED, tex, x, y, 0.0f, 0.0f, size, size, size, size);
     }
 
     private void jumpToMessage(int msgIndex) {
@@ -921,7 +923,7 @@ public class ChatBubbleScreen extends Screen {
         }
 
         if (text.startsWith("/"))
-            client.player.networkHandler.sendCommand(text.substring(1));
+            client.player.networkHandler.sendChatCommand(text.substring(1));
         else
             client.player.networkHandler.sendChatMessage(text);
         client.inGameHud.getChatHud().addToMessageHistory(text);

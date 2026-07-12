@@ -2,9 +2,8 @@ package com.niuqu.chatbubble;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gl.RenderPipelines;
 import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.render.GameRenderer;
-import net.minecraft.client.texture.AbstractTexture;
 import net.minecraft.client.texture.NativeImage;
 import net.minecraft.client.texture.NativeImageBackedTexture;
 import net.minecraft.util.Identifier;
@@ -135,7 +134,7 @@ public class ChatBubbleHudOverlay {
                 .getResourceAsStream("assets/e33chat/textures/gui/chat_icon.png")) {
             if (in != null) {
                 NativeImage img = NativeImage.read(in);
-                NativeImageBackedTexture tex = new NativeImageBackedTexture(img);
+                NativeImageBackedTexture tex = new NativeImageBackedTexture(() -> "chat_icon", img);
                 MinecraftClient.getInstance().getTextureManager().registerTexture(TEX_CHAT_ICON, tex);
             }
         } catch (Exception e) { e.printStackTrace(); }
@@ -143,16 +142,11 @@ public class ChatBubbleHudOverlay {
 
     private static void drawIcon(DrawContext context, int x, int y) {
         var mc = MinecraftClient.getInstance();
-        AbstractTexture abstractTex;
         try {
-            abstractTex = mc.getTextureManager().getTexture(TEX_CHAT_ICON);
+            mc.getTextureManager().getTexture(TEX_CHAT_ICON);
         } catch (Exception e) {
             loadIconTexture();
-            abstractTex = mc.getTextureManager().getTexture(TEX_CHAT_ICON);
         }
-        RenderSystem.setShaderTexture(0, abstractTex.getGlId());
-        RenderSystem.setShader(GameRenderer::getPositionTexProgram);
-        RenderSystem.enableBlend();
-        context.drawTexture(TEX_CHAT_ICON, x, y, 0, 0, ICON_S, ICON_S, ICON_S, ICON_S);
+        context.drawTexture(RenderPipelines.GUI_TEXTURED, TEX_CHAT_ICON, x, y, 0.0f, 0.0f, ICON_S, ICON_S, ICON_S, ICON_S);
     }
 }
