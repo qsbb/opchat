@@ -1,0 +1,32 @@
+{
+  "schemaVersion": 1,
+  "id": "e33chat",
+  "version": "${version}",
+  "name": "E33EPUS's ChatScreen",
+  "description": "替换原版聊天框的简单mod | A simple mod that replaces the vanilla chat screen",
+  "authors": ["E33EPUS"],
+  "contact": {
+    "sources": "https://github.com/E33EPUS/E33EPUS-s-ChatScreen"
+  },
+  "license": "MIT",
+  "icon": "assets/e33chat/icon.png",
+  "environment": "*",
+  "entrypoints": {
+    "client": [
+      "com.niuqu.chatbubble.ChatBubbleModClient"
+    ],
+    "main": [
+      "com.niuqu.chatbubble.ChatBubbleMod"
+    ]
+  },
+  "mixins": ["e33chat.mixins.json"],
+  "depends": {
+    "fabricloader": ">=0.16.0",
+    "fabric-api": "*",
+    "minecraft": "~1.21.1",
+    "java": ">=21"
+  },
+  "suggests": {
+    "cloth-config": "*"
+  }
+}

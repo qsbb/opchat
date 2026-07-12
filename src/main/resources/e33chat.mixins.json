@@ -1,0 +1,15 @@
+{
+  "required": true,
+  "minVersion": "0.8",
+  "package": "com.niuqu.chatbubble.mixin",
+  "compatibilityLevel": "JAVA_21",
+  "refmap": "e33chat.refmap.json",
+  "client": [
+    "ChatComponentMixin",
+    "ChatListenerMixin",
+    "CommandSuggestionsMixin"
+  ],
+  "injectors": {
+    "defaultRequire": 1
+  }
+}
