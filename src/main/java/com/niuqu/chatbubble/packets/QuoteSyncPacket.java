@@ -2,31 +2,31 @@ package com.niuqu.chatbubble.packets;
 
 import com.niuqu.chatbubble.ChatBubbleMod;
 import com.niuqu.chatbubble.ChatServerListener;
-import com.niuqu.chatbubble.NetworkHandler;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.minecraft.network.FriendlyByteBuf;
-import net.minecraft.network.codec.StreamCodec;
-import net.minecraft.network.protocol.common.custom.CustomPacketPayload;
+import net.minecraft.network.PacketByteBuf;
+import net.minecraft.network.codec.PacketCodec;
+import net.minecraft.network.packet.CustomPayload;
+import net.minecraft.util.Identifier;
 
 public record QuoteSyncPacket(String quotedSenderName, String quotedContent, String messageHash)
-        implements CustomPacketPayload {
+        implements CustomPayload {
 
-    public static final Type<QuoteSyncPacket> TYPE = new Type<>(NetworkHandler.QUOTE_SYNC_ID);
+    public static final Id<QuoteSyncPacket> ID = new Id<>(Identifier.of(ChatBubbleMod.MODID, "quote_sync"));
 
-    public static final StreamCodec<FriendlyByteBuf, QuoteSyncPacket> CODEC =
-        StreamCodec.of(
-            (buf, pkt) -> {
-                buf.writeUtf(pkt.quotedSenderName);
-                buf.writeUtf(pkt.quotedContent);
-                buf.writeUtf(pkt.messageHash);
+    public static final PacketCodec<PacketByteBuf, QuoteSyncPacket> CODEC =
+        PacketCodec.of(
+            (pkt, buf) -> {
+                buf.writeString(pkt.quotedSenderName);
+                buf.writeString(pkt.quotedContent);
+                buf.writeString(pkt.messageHash);
             },
-            buf -> new QuoteSyncPacket(buf.readUtf(), buf.readUtf(), buf.readUtf())
+            buf -> new QuoteSyncPacket(buf.readString(), buf.readString(), buf.readString())
         );
 
     @Override
-    public Type<? extends CustomPacketPayload> type() {
-        return TYPE;
+    public Id<? extends CustomPayload> getId() {
+        return ID;
     }
 
     public static void send(String quotedSenderName, String quotedContent, String messageText) {
@@ -35,12 +35,12 @@ public record QuoteSyncPacket(String quotedSenderName, String quotedContent, Str
     }
 
     public static void registerReceiver() {
-        ServerPlayNetworking.registerGlobalReceiver(TYPE, (payload, context) -> {
+        ServerPlayNetworking.registerGlobalReceiver(ID, (payload, context) -> {
             context.server().execute(() -> {
                 var sender = context.player();
                 if (sender != null) {
                     ChatServerListener.onQuoteReceived(
-                        sender.getUUID(), payload.quotedSenderName, payload.quotedContent, payload.messageHash);
+                        sender.getUuid(), payload.quotedSenderName, payload.quotedContent, payload.messageHash);
                 }
             });
         });

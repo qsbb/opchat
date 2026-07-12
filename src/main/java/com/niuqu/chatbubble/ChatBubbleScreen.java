@@ -3,14 +3,14 @@ package com.niuqu.chatbubble;
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.screen.CommandSuggestor;
+import net.minecraft.client.gui.screen.ChatInputSuggestor;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.client.render.GameRenderer;
 import net.minecraft.client.texture.NativeImage;
-import net.minecraft.client.texture.DynamicTexture;
+import net.minecraft.client.texture.NativeImageBackedTexture;
 import net.minecraft.client.texture.AbstractTexture;
-import net.minecraft.client.gui.PlayerSkinDrawer;
+
 import net.minecraft.text.ClickEvent;
 import net.minecraft.text.MutableText;
 import net.minecraft.text.OrderedText;
@@ -58,7 +58,7 @@ public class ChatBubbleScreen extends Screen {
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
 
     private TextFieldWidget input;
-    private CommandSuggestor commandSuggestions;
+    private ChatInputSuggestor commandSuggestions;
     private static int inputY;
     private final String initialText;
     private int scrollOffset;
@@ -134,7 +134,7 @@ public class ChatBubbleScreen extends Screen {
         input.setChangedListener(this::onEdited);
         addDrawableChild(input);
 
-        commandSuggestions = new CommandSuggestor(client, this, input, textRenderer,
+        commandSuggestions = new ChatInputSuggestor(client, this, input, textRenderer,
             false, false, 0, 8, true, 0xDD1E1E1E);
         commandSuggestions.refresh();
 
@@ -158,8 +158,8 @@ public class ChatBubbleScreen extends Screen {
     }
 
     private String getWorldName() {
-        if (client.getSingleplayerServer() != null)
-            return client.getSingleplayerServer().getSaveProperties().getLevelName();
+        if (client.getServer() != null)
+            return client.getServer().getSaveProperties().getLevelName();
         if (client.getCurrentServerEntry() != null)
             return client.getCurrentServerEntry().name;
         return Text.translatable("e33chat.title.fallback").getString();
@@ -174,9 +174,7 @@ public class ChatBubbleScreen extends Screen {
 
     @Override
     public void tick() {
-        if (editingTitle) titleEditor.tick();
         if (copyToastTicks > 0) copyToastTicks--;
-        input.tick();
         if (closing && net.minecraft.util.Util.getMeasuringTimeMs() - animStart >= ANIM_MS)
             client.setScreen(null);
     }
@@ -200,7 +198,7 @@ public class ChatBubbleScreen extends Screen {
             return true;
         if (keyCode == 256) { close(); return true; }
         if (keyCode == 257 || keyCode == 335) {
-            if (commandSuggestions != null) commandSuggestions.close();
+            if (commandSuggestions != null) commandSuggestions.clearWindow();
             sendMessage();
             return true;
         }
@@ -211,7 +209,7 @@ public class ChatBubbleScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        if (commandSuggestions != null && commandSuggestions.mouseScrolled(mouseX, mouseY, horizontalAmount, verticalAmount))
+        if (commandSuggestions != null && commandSuggestions.mouseScrolled(verticalAmount))
             return true;
         scrollToBottom = false;
         scrollOffset -= (int) (verticalAmount * 20);
@@ -289,7 +287,7 @@ public class ChatBubbleScreen extends Screen {
                     && mouseY >= avatarY && mouseY <= avatarY + AVATAR) {
                     String mention = "@" + msg.senderName().getString() + " ";
                     input.setText(input.getText() + mention);
-                    input.setCursorToLast();
+                    input.setCursorToEnd(false);
                     return true;
                 }
             }
@@ -314,7 +312,7 @@ public class ChatBubbleScreen extends Screen {
                     input.setText(click.getValue());
                     return true;
                 }
-                handleComponentClicked(style);
+                handleTextClick(style);
                 if (click.getAction() != ClickEvent.Action.COPY_TO_CLIPBOARD
                     && click.getAction() != ClickEvent.Action.OPEN_URL) {
                     client.setScreen(null);
@@ -453,7 +451,7 @@ public class ChatBubbleScreen extends Screen {
         editingTitle = true;
         titleEditor.setVisible(true);
         titleEditor.setText(getDisplayTitle());
-        titleEditor.setCursorToLast();
+        titleEditor.setCursorToEnd(false);
         titleEditor.setFocused(true);
         input.setFocused(false);
         setFocused(titleEditor);
@@ -673,7 +671,7 @@ public class ChatBubbleScreen extends Screen {
         if (entry != null) {
             skin = entry.getSkinTextures().texture();
         } else {
-            skin = PlayerSkinDrawer.DEFAULT_SKIN;
+            skin = Identifier.of("textures/entity/player/slim/steve.png");
         }
         // Draw head (face)
         context.drawTexture(skin, x, y, 8, 8, 8, 8, 64, 64);
@@ -871,7 +869,7 @@ public class ChatBubbleScreen extends Screen {
         try (InputStream in = getClass().getClassLoader().getResourceAsStream(classpath)) {
             if (in != null) {
                 NativeImage img = NativeImage.read(in);
-                DynamicTexture tex = new DynamicTexture(img);
+                NativeImageBackedTexture tex = new NativeImageBackedTexture(img);
                 client.getTextureManager().registerTexture(loc, tex);
             }
         } catch (Exception e) {

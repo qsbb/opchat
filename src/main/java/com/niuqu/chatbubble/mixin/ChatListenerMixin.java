@@ -35,7 +35,7 @@ public class ChatListenerMixin {
         ));
     }
 
-    @Inject(method = "onDisguisedChatMessage", at = @At("HEAD"))
+    @Inject(method = "onProfilelessMessage", at = @At("HEAD"))
     private void onDisguisedChat(Text message, MessageType.Parameters params, CallbackInfo ci) {
         String msgStr = message.getString();
         if (msgStr.startsWith("xaero-waypoint:")

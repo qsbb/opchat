@@ -1,7 +1,6 @@
 plugins {
     id 'fabric-loom' version '1.9-SNAPSHOT'
     id 'maven-publish'
-    id 'org.spongepowered.mixin' version '0.7-SNAPSHOT'
 }
 
 version = project.mod_version
@@ -35,7 +34,7 @@ dependencies {
     modImplementation "net.fabricmc:fabric-loader:${project.loader_version}"
     modImplementation "net.fabricmc.fabric-api:fabric-api:${project.fabric_version}"
 
-    annotationProcessor 'org.spongepowered:mixin:0.8.5:processor'
+
 }
 
 processResources {
@@ -66,11 +65,6 @@ jar {
             "MixinConfigs": "${project.mod_id}.mixins.json"
         ])
     }
-}
-
-mixin {
-    add sourceSets.main, "${project.mod_id}.refmap.json"
-    config "${project.mod_id}.mixins.json"
 }
 
 publishing {

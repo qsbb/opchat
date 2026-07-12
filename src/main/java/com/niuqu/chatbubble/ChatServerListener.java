@@ -2,7 +2,7 @@ package com.niuqu.chatbubble;
 
 import com.niuqu.chatbubble.packets.ChatMetaPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
-import net.minecraft.server.level.ServerPlayer;
+import net.minecraft.server.network.ServerPlayerEntity;
 
 import java.util.*;
 import java.util.regex.Matcher;
@@ -21,20 +21,20 @@ public class ChatServerListener {
         pendingQuotes.put(senderUUID, new QuotePending(quotedSenderName, quotedContent, messageHash));
     }
 
-    public static void onServerChat(ServerPlayer player, String rawText) {
+    public static void onServerChat(ServerPlayerEntity player, String rawText) {
         String messageHash = String.valueOf(rawText.hashCode());
 
-        List<String> mentions = extractMentions(rawText, player.getServer().getPlayerList().getPlayerCount());
+        List<String> mentions = extractMentions(rawText, player.getServer().getPlayerManager().getPlayerList().size());
 
-        QuotePending quote = pendingQuotes.remove(player.getUUID());
+        QuotePending quote = pendingQuotes.remove(player.getUuid());
         String quoteSender = quote != null ? quote.quotedSenderName() : "";
         String quoteContent = quote != null ? quote.quotedContent() : "";
 
         if (quote != null || !mentions.isEmpty()) {
             ChatMetaPacket meta = new ChatMetaPacket(
-                player.getUUID(), messageHash, quoteSender, quoteContent, mentions);
+                player.getUuid(), messageHash, quoteSender, quoteContent, mentions);
             // Send to all players
-            for (ServerPlayer target : player.getServer().getPlayerList().getPlayers()) {
+            for (ServerPlayerEntity target : player.getServer().getPlayerManager().getPlayerList()) {
                 ServerPlayNetworking.send(target, meta);
             }
         }

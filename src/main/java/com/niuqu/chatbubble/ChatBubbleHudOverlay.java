@@ -6,7 +6,7 @@ import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.render.GameRenderer;
 import net.minecraft.client.texture.AbstractTexture;
 import net.minecraft.client.texture.NativeImage;
-import net.minecraft.client.texture.DynamicTexture;
+import net.minecraft.client.texture.NativeImageBackedTexture;
 import net.minecraft.util.Identifier;
 
 import java.io.InputStream;
@@ -135,7 +135,7 @@ public class ChatBubbleHudOverlay {
                 .getResourceAsStream("assets/e33chat/textures/gui/chat_icon.png")) {
             if (in != null) {
                 NativeImage img = NativeImage.read(in);
-                DynamicTexture tex = new DynamicTexture(img);
+                NativeImageBackedTexture tex = new NativeImageBackedTexture(img);
                 MinecraftClient.getInstance().getTextureManager().registerTexture(TEX_CHAT_ICON, tex);
             }
         } catch (Exception e) { e.printStackTrace(); }

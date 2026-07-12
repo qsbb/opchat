@@ -4,9 +4,9 @@ import com.niuqu.chatbubble.ChatBubbleConfig;
 import com.niuqu.chatbubble.ChatMessageStore;
 import com.niuqu.chatbubble.ChatMessageStore.SenderMeta;
 import java.util.UUID;
-import net.minecraft.client.GuiMessageTag;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.hud.ChatHud;
+import net.minecraft.client.gui.hud.MessageIndicator;
 import net.minecraft.network.message.MessageSignatureData;
 import net.minecraft.text.Text;
 import org.spongepowered.asm.mixin.Mixin;
@@ -29,10 +29,10 @@ public class ChatComponentMixin {
         captureMessage(message);
     }
 
-    @Inject(method = "addMessage(Lnet/minecraft/text/Text;Lnet/minecraft/network/message/MessageSignatureData;Lnet/minecraft/client/GuiMessageTag;)V",
+    @Inject(method = "addMessage(Lnet/minecraft/text/Text;Lnet/minecraft/network/message/MessageSignatureData;Lnet/minecraft/client/gui/hud/MessageIndicator;)V",
             at = @At("HEAD"))
     private void onAddMessageFull(Text message, MessageSignatureData signature,
-                                   GuiMessageTag tag, CallbackInfo ci) {
+                                   MessageIndicator tag, CallbackInfo ci) {
         captureMessage(message);
     }
 

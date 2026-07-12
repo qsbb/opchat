@@ -6,8 +6,8 @@ import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
 import net.fabricmc.fabric.api.client.screen.v1.ScreenEvents;
 import net.fabricmc.fabric.api.client.screen.v1.Screens;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
-import net.minecraft.client.Minecraft;
-import net.minecraft.client.gui.screens.ChatScreen;
+import net.minecraft.client.MinecraftClient;
+import net.minecraft.client.gui.screen.ChatScreen;
 
 public class ChatBubbleModClient implements ClientModInitializer {
 
@@ -34,12 +34,12 @@ public class ChatBubbleModClient implements ClientModInitializer {
         // Client tick
         ClientTickEvents.END_CLIENT_TICK.register(client -> {
             String key;
-            if (client.level == null || client.player == null) {
+            if (client.world == null || client.player == null) {
                 key = null;
-            } else if (client.getSingleplayerServer() != null) {
-                key = "SP:" + client.getSingleplayerServer().getWorldData().getLevelName();
-            } else if (client.getCurrentServer() != null) {
-                key = "MP:" + client.getCurrentServer().name;
+            } else if (client.getServer() != null) {
+                key = "SP:" + client.getServer().getSaveProperties().getLevelName();
+            } else if (client.getCurrentServerEntry() != null) {
+                key = "MP:" + client.getCurrentServerEntry().name;
             } else {
                 key = "world";
             }

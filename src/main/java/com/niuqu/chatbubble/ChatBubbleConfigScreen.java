@@ -9,7 +9,6 @@ import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
 import net.minecraft.client.gui.widget.CyclingButtonWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
-import net.minecraft.text.CommonTexts;
 import net.minecraft.text.Text;
 import net.minecraft.util.math.MathHelper;
 
@@ -112,7 +111,7 @@ public class ChatBubbleConfigScreen extends Screen {
         addToggleOption(y, "e33chat.config.chat_report_compat", ChatBubbleConfig.CHAT_REPORT_COMPAT, val -> ChatBubbleConfig.CHAT_REPORT_COMPAT = val);
         y += ROW_H;
 
-        addDrawableChild(ButtonWidget.builder(CommonTexts.DONE, btn -> onClose())
+        addDrawableChild(ButtonWidget.builder(Text.translatable("gui.done"), btn -> close())
             .dimensions(width / 2 - 100, height - 32, 200, 20).build());
     }
 

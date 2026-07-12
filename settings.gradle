@@ -4,6 +4,21 @@ pluginManagement {
         mavenCentral()
         gradlePluginPortal()
     }
+    resolutionStrategy {
+        eachPlugin {
+            if (requested.id.id.startsWith('fabric-loom') || requested.id.id.startsWith('net.fabricmc')) {
+                useModule("net.fabricmc:fabric-loom:${requested.version}")
+            }
+        }
+    }
+}
+
+buildscript {
+    configurations.classpath {
+        resolutionStrategy {
+            force 'com.google.code.gson:gson:2.11.0'
+        }
+    }
 }
 
 plugins {

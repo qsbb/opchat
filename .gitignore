@@ -30,3 +30,8 @@ Thumbs.db
 
 # Logs
 *.log
+
+# JDK and temp downloads
+zulu21*/
+gradle-8.11.1/
+*.zip
