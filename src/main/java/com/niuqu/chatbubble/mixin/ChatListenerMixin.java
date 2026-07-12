@@ -3,7 +3,7 @@ package com.niuqu.chatbubble.mixin;
 import com.mojang.authlib.GameProfile;
 import com.niuqu.chatbubble.ChatBubbleConfig;
 import com.niuqu.chatbubble.ChatMessageStore;
-import com.niuqu.chatbubble.ChatMessageStore.SenderMeta;
+import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.message.MessageHandler;
 import net.minecraft.network.message.MessageType;
 import net.minecraft.network.message.SignedMessage;
@@ -28,10 +28,39 @@ public class ChatListenerMixin {
             || rawStr.startsWith("xaero_waypoint_add:")) {
             return;
         }
-        ChatMessageStore.setPendingMeta(new SenderMeta(
+        Text senderName = Text.literal(senderProfile.name());
+        // Check echo: own message bouncing back from server
+        var player = MinecraftClient.getInstance().player;
+        if (player != null && senderName.getString().equals(player.getName().getString())) {
+            if (ChatMessageStore.consumeEchoIfSenderMatches(senderName.getString())) return;
+        }
+        ChatMessageStore.addMessage(message,
             senderId != null ? senderId : new UUID(0, 0),
-            Text.literal(senderProfile.name()),
-            message,
+            senderName,
+            false);
+    }
+
+    @Inject(method = "onUnverifiedMessage", at = @At("HEAD"))
+    private void onUnverifiedChat(UUID senderId, net.minecraft.network.message.MessageSignatureData signature, MessageType.Parameters params, CallbackInfo ci) {
+        // Look up player name from UUID
+        var networkHandler = MinecraftClient.getInstance().getNetworkHandler();
+        if (networkHandler == null) return;
+        String senderName = null;
+        for (var info : networkHandler.getPlayerList()) {
+            if (info.getProfile().id() != null && info.getProfile().id().equals(senderId)) {
+                senderName = info.getProfile().name();
+                break;
+            }
+        }
+        if (senderName == null || senderName.isEmpty()) return;
+
+        // We can't easily extract the message text from onUnverifiedMessage params,
+        // rely on ChatComponentMixin to capture from ChatHud.addMessage
+        // Just set pending meta for now
+        ChatMessageStore.setPendingMeta(new ChatMessageStore.SenderMeta(
+            senderId != null ? senderId : new UUID(0, 0),
+            Text.literal(senderName),
+            Text.literal(""), // placeholder, actual text comes from ChatHud.addMessage
             false
         ));
     }
@@ -44,15 +73,13 @@ public class ChatListenerMixin {
             || msgStr.startsWith("xaero_waypoint_add:")) {
             return;
         }
-        Text senderName = params.applyChatDecoration(Text.empty()).getString().isEmpty() 
+        Text senderName = params.applyChatDecoration(Text.empty()).getString().isEmpty()
             ? null : params.name();
         boolean hasSender = senderName != null;
-        ChatMessageStore.setPendingMeta(new SenderMeta(
+        ChatMessageStore.addMessage(message,
             new UUID(0, 0),
             hasSender ? senderName : Text.translatable("e33chat.sender.system"),
-            message,
-            !hasSender
-        ));
+            !hasSender);
     }
 
     @Inject(method = "onGameMessage", at = @At("HEAD"))
@@ -66,30 +93,24 @@ public class ChatListenerMixin {
                 String extractedName = text.substring(1, endBracket);
                 String cleanContent = text.substring(endBracket + 2);
                 UUID senderId = ChatMessageStore.lookupPlayerUUID(extractedName);
-                ChatMessageStore.setPendingMeta(new SenderMeta(
+                ChatMessageStore.addMessage(Text.literal(cleanContent),
                     senderId,
                     Text.literal(extractedName),
-                    Text.literal(cleanContent),
-                    false
-                ));
+                    false);
                 return;
             }
             boolean isSystem = !ChatBubbleConfig.SYSTEM_CHAT_AS_BUBBLE;
-            ChatMessageStore.setPendingMeta(new SenderMeta(
+            ChatMessageStore.addMessage(message,
                 new UUID(0, 0),
                 Text.translatable("e33chat.sender.system"),
-                message,
-                isSystem
-            ));
+                isSystem);
             return;
         }
 
         boolean isSystem = !ChatBubbleConfig.SYSTEM_CHAT_AS_BUBBLE;
-        ChatMessageStore.setPendingMeta(new SenderMeta(
+        ChatMessageStore.addMessage(message,
             new UUID(0, 0),
             Text.translatable("e33chat.sender.system"),
-            message,
-            isSystem
-        ));
+            isSystem);
     }
 }
