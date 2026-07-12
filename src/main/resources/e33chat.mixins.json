@@ -6,8 +6,7 @@
   "refmap": "e33chat.refmap.json",
   "client": [
     "ChatComponentMixin",
-    "ChatListenerMixin",
-    "CommandSuggestionsMixin"
+    "ChatListenerMixin"
   ],
   "injectors": {
     "defaultRequire": 1
