@@ -40,16 +40,23 @@ public class ChatMessageStore {
     public record SenderMeta(UUID senderUUID, Text senderName,
                              Text rawContent, boolean isSystem) {}
 
-    private static final Map<String, SenderMeta> PENDING_META_MAP = new HashMap<>();
+    private static final List<SenderMeta> PENDING_META_QUEUE = new ArrayList<>();
 
     public static void setPendingMeta(SenderMeta meta) {
-        String hash = String.valueOf(meta.rawContent().getString().hashCode());
-        PENDING_META_MAP.put(hash, meta);
+        PENDING_META_QUEUE.add(meta);
+        if (PENDING_META_QUEUE.size() > 10) PENDING_META_QUEUE.remove(0);
     }
 
     public static SenderMeta consumePendingMeta(String messageContent) {
-        String hash = String.valueOf(messageContent.hashCode());
-        return PENDING_META_MAP.remove(hash);
+        for (int i = 0; i < PENDING_META_QUEUE.size(); i++) {
+            SenderMeta meta = PENDING_META_QUEUE.get(i);
+            String raw = meta.rawContent().getString();
+            if (messageContent.contains(raw) || raw.contains(messageContent)) {
+                PENDING_META_QUEUE.remove(i);
+                return meta;
+            }
+        }
+        return null;
     }
 
     private static int pendingEchoCount;
