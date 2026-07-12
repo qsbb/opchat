@@ -1,4 +1,4 @@
-package com.niuqu.chatbubble;
+package com.opchat;
 
 import com.google.gson.Gson;
 import com.google.gson.GsonBuilder;
@@ -8,15 +8,18 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.ArrayList;
+import java.util.List;
 
 public class ChatBubbleConfig {
     private static final Gson GSON = new GsonBuilder().setPrettyPrinting().create();
-    private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("e33chat-client.json");
+    private static final Path CONFIG_PATH = FabricLoader.getInstance().getConfigDir().resolve("opchat-client.json");
 
     // Config values
     public static boolean ENABLED = true;
     public static boolean RED_DOT_ENABLED = true;
     public static boolean ANIMATION_ENABLED = true;
+    public static int PANEL_OPACITY = 93;
     public static boolean STRONG_HINT_ENABLED = true;
     public static boolean MENTION_STRONG_HINT_ENABLED = true;
     public static boolean SYSTEM_CHAT_AS_BUBBLE = false;
@@ -29,6 +32,7 @@ public class ChatBubbleConfig {
     public static String OTHER_BUBBLE_COLOR = "#4A4A4A";
     public static String OWN_TEXT_COLOR = "#0A0A0A";
     public static String OTHER_TEXT_COLOR = "#FFFFFF";
+    public static List<String> QUICK_INPUTS = new ArrayList<>();
 
     private static ConfigData data = new ConfigData();
 
@@ -61,6 +65,7 @@ public class ChatBubbleConfig {
         ENABLED = data.enabled;
         RED_DOT_ENABLED = data.red_dot;
         ANIMATION_ENABLED = data.animation;
+        PANEL_OPACITY = data.panel_opacity;
         STRONG_HINT_ENABLED = data.strong_hint;
         MENTION_STRONG_HINT_ENABLED = data.mention_strong_hint;
         SYSTEM_CHAT_AS_BUBBLE = data.system_chat_as_bubble;
@@ -73,12 +78,14 @@ public class ChatBubbleConfig {
         OTHER_BUBBLE_COLOR = data.other_bubble_color;
         OWN_TEXT_COLOR = data.own_text_color;
         OTHER_TEXT_COLOR = data.other_text_color;
+        QUICK_INPUTS = data.quick_inputs != null ? new ArrayList<>(data.quick_inputs) : new ArrayList<>();
     }
 
     private static void updateData() {
         data.enabled = ENABLED;
         data.red_dot = RED_DOT_ENABLED;
         data.animation = ANIMATION_ENABLED;
+        data.panel_opacity = PANEL_OPACITY;
         data.strong_hint = STRONG_HINT_ENABLED;
         data.mention_strong_hint = MENTION_STRONG_HINT_ENABLED;
         data.system_chat_as_bubble = SYSTEM_CHAT_AS_BUBBLE;
@@ -91,6 +98,7 @@ public class ChatBubbleConfig {
         data.other_bubble_color = OTHER_BUBBLE_COLOR;
         data.own_text_color = OWN_TEXT_COLOR;
         data.other_text_color = OTHER_TEXT_COLOR;
+        data.quick_inputs = QUICK_INPUTS;
     }
 
     public static int parseHexColor(String hex, int defaultColor) {
@@ -107,6 +115,7 @@ public class ChatBubbleConfig {
         boolean enabled = true;
         boolean red_dot = true;
         boolean animation = true;
+        int panel_opacity = 93;
         boolean strong_hint = true;
         boolean mention_strong_hint = true;
         boolean system_chat_as_bubble = false;
@@ -119,5 +128,6 @@ public class ChatBubbleConfig {
         String other_bubble_color = "#4A4A4A";
         String own_text_color = "#0A0A0A";
         String other_text_color = "#FFFFFF";
+        List<String> quick_inputs = new ArrayList<>();
     }
 }

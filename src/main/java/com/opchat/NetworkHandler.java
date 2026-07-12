@@ -1,7 +1,7 @@
-package com.niuqu.chatbubble;
+package com.opchat;
 
-import com.niuqu.chatbubble.packets.ChatMetaPacket;
-import com.niuqu.chatbubble.packets.QuoteSyncPacket;
+import com.opchat.packets.ChatMetaPacket;
+import com.opchat.packets.QuoteSyncPacket;
 import net.fabricmc.fabric.api.networking.v1.PayloadTypeRegistry;
 import net.minecraft.util.Identifier;
 

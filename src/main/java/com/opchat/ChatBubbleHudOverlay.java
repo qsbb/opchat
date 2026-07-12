@@ -1,4 +1,4 @@
-package com.niuqu.chatbubble;
+package com.opchat;
 
 import com.mojang.blaze3d.systems.RenderSystem;
 import net.minecraft.client.MinecraftClient;
@@ -17,7 +17,7 @@ public class ChatBubbleHudOverlay {
     private static final int ICON_S = 16;
     private static final int RED_DOT_R = 4;
     public static final Identifier TEX_CHAT_ICON =
-        Identifier.of("e33chat", "textures/gui/chat_icon");
+        Identifier.of("opchat", "textures/gui/chat_icon");
     public static boolean iconLoaded;
 
     public static void render(DrawContext context) {
@@ -131,7 +131,7 @@ public class ChatBubbleHudOverlay {
 
     private static void loadIconTexture() {
         try (InputStream in = ChatBubbleHudOverlay.class.getClassLoader()
-                .getResourceAsStream("assets/e33chat/textures/gui/chat_icon.png")) {
+                .getResourceAsStream("assets/opchat/textures/gui/chat_icon.png")) {
             if (in != null) {
                 NativeImage img = NativeImage.read(in);
                 NativeImageBackedTexture tex = new NativeImageBackedTexture(() -> "chat_icon", img);

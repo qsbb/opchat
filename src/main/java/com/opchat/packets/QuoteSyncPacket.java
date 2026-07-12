@@ -1,7 +1,7 @@
-package com.niuqu.chatbubble.packets;
+package com.opchat.packets;
 
-import com.niuqu.chatbubble.ChatBubbleMod;
-import com.niuqu.chatbubble.ChatServerListener;
+import com.opchat.ChatBubbleMod;
+import com.opchat.ChatServerListener;
 import net.fabricmc.fabric.api.client.networking.v1.ClientPlayNetworking;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.network.PacketByteBuf;

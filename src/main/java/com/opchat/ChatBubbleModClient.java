@@ -1,4 +1,4 @@
-package com.niuqu.chatbubble;
+package com.opchat;
 
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
@@ -18,9 +18,16 @@ public class ChatBubbleModClient implements ClientModInitializer {
         // Intercept vanilla ChatScreen opening
         ScreenEvents.AFTER_INIT.register((client, screen, scaledWidth, scaledHeight) -> {
             if (!ChatBubbleConfig.ENABLED) return;
-            if (screen instanceof ChatScreen) {
-                // Replace with our screen after vanilla ChatScreen is fully initialized
-                client.setScreen(new ChatBubbleScreen(""));
+            if (screen instanceof ChatScreen chatScreen) {
+                String initialText = "";
+                try {
+                    var field = ChatScreen.class.getDeclaredField("originalChatText");
+                    field.setAccessible(true);
+                    initialText = (String) field.get(chatScreen);
+                } catch (Exception e) {
+                    // fallback: empty
+                }
+                client.setScreen(new ChatBubbleScreen(initialText != null ? initialText : ""));
             }
         });
 

@@ -1,6 +1,6 @@
-package com.niuqu.chatbubble;
+package com.opchat;
 
-import com.niuqu.chatbubble.packets.ChatMetaPacket;
+import com.opchat.packets.ChatMetaPacket;
 import net.fabricmc.fabric.api.networking.v1.ServerPlayNetworking;
 import net.minecraft.server.network.ServerPlayerEntity;
 

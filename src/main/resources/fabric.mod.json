@@ -1,25 +1,25 @@
 {
   "schemaVersion": 1,
-  "id": "e33chat",
+  "id": "opchat",
   "version": "${version}",
-  "name": "E33EPUS's ChatScreen",
+  "name": "OpChat",
   "description": "替换原版聊天框的简单mod | A simple mod that replaces the vanilla chat screen",
-  "authors": ["E33EPUS"],
+  "authors": ["qsbb"],
   "contact": {
-    "sources": "https://github.com/E33EPUS/E33EPUS-s-ChatScreen"
+    "sources": "https://github.com/qsbb/opchat"
   },
   "license": "MIT",
-  "icon": "assets/e33chat/icon.png",
+  "icon": "assets/opchat/logo.png",
   "environment": "*",
   "entrypoints": {
     "client": [
-      "com.niuqu.chatbubble.ChatBubbleModClient"
+      "com.opchat.ChatBubbleModClient"
     ],
     "main": [
-      "com.niuqu.chatbubble.ChatBubbleMod"
+      "com.opchat.ChatBubbleMod"
     ]
   },
-  "mixins": ["e33chat.mixins.json"],
+  "mixins": ["opchat.mixins.json"],
   "depends": {
     "fabricloader": ">=0.16.0",
     "fabric-api": "*",

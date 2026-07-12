@@ -1,4 +1,4 @@
-package com.niuqu.chatbubble;
+package com.opchat;
 
 import com.google.gson.Gson;
 import com.google.gson.reflect.TypeToken;
@@ -200,14 +200,14 @@ public class ChatMessageStore {
                     || (replySender != null && replySender.equals(playerName)));
 
             if (mentionToHint) {
-                strongHintText = Text.translatable("e33chat.notif.mention").getString();
+                strongHintText = Text.translatable("opchat.notif.mention").getString();
                 strongHintTicks = STRONG_HINT_DURATION;
                 strongHintIsMention = true;
             }
 
             if (ChatBubbleConfig.PREVIEW_ENABLED && !systemToHint && !mentionToHint) {
                 String sender = senderName != null ? senderName.getString() : "";
-                if (sender.isEmpty() && isSystem) sender = Text.translatable("e33chat.sender.system").getString();
+                if (sender.isEmpty() && isSystem) sender = Text.translatable("opchat.sender.system").getString();
                 String preview = sender.isEmpty() ? content.getString() : sender + ": " + content.getString();
                 previews.add(new PreviewEntry(preview, PREVIEW_TICKS));
                 while (previews.size() > ChatBubbleConfig.PREVIEW_LINES)
@@ -336,7 +336,7 @@ public class ChatMessageStore {
     }
 
     private static Path getTitlesFile() {
-        return MinecraftClient.getInstance().runDirectory.toPath().resolve("e33chat/titles.json");
+        return MinecraftClient.getInstance().runDirectory.toPath().resolve("opchat/titles.json");
     }
 
     private static void loadWorldTitles() {

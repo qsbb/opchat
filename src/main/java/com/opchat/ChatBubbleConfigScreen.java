@@ -1,4 +1,4 @@
-package com.niuqu.chatbubble;
+package com.opchat;
 
 import java.util.ArrayList;
 import java.util.List;
@@ -25,7 +25,7 @@ public class ChatBubbleConfigScreen extends Screen {
     private final List<Element> scrollWidgets = new ArrayList<>();
 
     public ChatBubbleConfigScreen(Screen lastScreen) {
-        super(Text.translatable("e33chat.config.title"));
+        super(Text.translatable("opchat.config.title"));
         this.lastScreen = lastScreen;
     }
 
@@ -35,25 +35,25 @@ public class ChatBubbleConfigScreen extends Screen {
         scrollOffset = MathHelper.clamp(scrollOffset, 0, calcMaxScroll());
         int y = START_Y - scrollOffset;
 
-        addToggleOption(y, "e33chat.config.enabled", ChatBubbleConfig.ENABLED, val -> ChatBubbleConfig.ENABLED = val);
+        addToggleOption(y, "opchat.config.enabled", ChatBubbleConfig.ENABLED, val -> ChatBubbleConfig.ENABLED = val);
         y += ROW_H;
 
-        addToggleOption(y, "e33chat.config.red_dot", ChatBubbleConfig.RED_DOT_ENABLED, val -> ChatBubbleConfig.RED_DOT_ENABLED = val);
+        addToggleOption(y, "opchat.config.red_dot", ChatBubbleConfig.RED_DOT_ENABLED, val -> ChatBubbleConfig.RED_DOT_ENABLED = val);
         y += ROW_H;
 
-        addToggleOption(y, "e33chat.config.animation", ChatBubbleConfig.ANIMATION_ENABLED, val -> ChatBubbleConfig.ANIMATION_ENABLED = val);
+        addToggleOption(y, "opchat.config.animation", ChatBubbleConfig.ANIMATION_ENABLED, val -> ChatBubbleConfig.ANIMATION_ENABLED = val);
         y += ROW_H;
 
-        addToggleOption(y, "e33chat.config.strong_hint", ChatBubbleConfig.STRONG_HINT_ENABLED, val -> ChatBubbleConfig.STRONG_HINT_ENABLED = val);
+        addToggleOption(y, "opchat.config.strong_hint", ChatBubbleConfig.STRONG_HINT_ENABLED, val -> ChatBubbleConfig.STRONG_HINT_ENABLED = val);
         y += ROW_H;
 
-        addToggleOption(y, "e33chat.config.mention_strong_hint", ChatBubbleConfig.MENTION_STRONG_HINT_ENABLED, val -> ChatBubbleConfig.MENTION_STRONG_HINT_ENABLED = val);
+        addToggleOption(y, "opchat.config.mention_strong_hint", ChatBubbleConfig.MENTION_STRONG_HINT_ENABLED, val -> ChatBubbleConfig.MENTION_STRONG_HINT_ENABLED = val);
         y += ROW_H;
 
-        addToggleOption(y, "e33chat.config.anti_spam", ChatBubbleConfig.ANTI_SPAM, val -> ChatBubbleConfig.ANTI_SPAM = val);
+        addToggleOption(y, "opchat.config.anti_spam", ChatBubbleConfig.ANTI_SPAM, val -> ChatBubbleConfig.ANTI_SPAM = val);
         y += ROW_H;
 
-        addToggleOption(y, "e33chat.config.preview_enabled", ChatBubbleConfig.PREVIEW_ENABLED, val -> ChatBubbleConfig.PREVIEW_ENABLED = val);
+        addToggleOption(y, "opchat.config.preview_enabled", ChatBubbleConfig.PREVIEW_ENABLED, val -> ChatBubbleConfig.PREVIEW_ENABLED = val);
         y += ROW_H;
 
         // Preview lines (1-3)
@@ -105,10 +105,17 @@ public class ChatBubbleConfigScreen extends Screen {
         }
         y += ROW_H;
 
-        addToggleOption(y, "e33chat.config.system_chat_as_bubble", ChatBubbleConfig.SYSTEM_CHAT_AS_BUBBLE, val -> ChatBubbleConfig.SYSTEM_CHAT_AS_BUBBLE = val);
+        // Panel opacity (0-100)
+        {
+            TextFieldWidget box = mkIntBox(y, String.valueOf(ChatBubbleConfig.PANEL_OPACITY), 0, 100, val -> ChatBubbleConfig.PANEL_OPACITY = val);
+            scrollWidgets.add(addDrawableChild(box));
+        }
         y += ROW_H;
 
-        addToggleOption(y, "e33chat.config.chat_report_compat", ChatBubbleConfig.CHAT_REPORT_COMPAT, val -> ChatBubbleConfig.CHAT_REPORT_COMPAT = val);
+        addToggleOption(y, "opchat.config.system_chat_as_bubble", ChatBubbleConfig.SYSTEM_CHAT_AS_BUBBLE, val -> ChatBubbleConfig.SYSTEM_CHAT_AS_BUBBLE = val);
+        y += ROW_H;
+
+        addToggleOption(y, "opchat.config.chat_report_compat", ChatBubbleConfig.CHAT_REPORT_COMPAT, val -> ChatBubbleConfig.CHAT_REPORT_COMPAT = val);
         y += ROW_H;
 
         addDrawableChild(ButtonWidget.builder(Text.translatable("gui.done"), btn -> close())
@@ -174,13 +181,14 @@ public class ChatBubbleConfigScreen extends Screen {
         if (y > -ROW_H && y < height)
             context.drawTextWithShadow(textRenderer, Text.literal("常规选项"), LABEL_X, y - 12, 0xFFFFAA00);
 
-        String[] labels = {"e33chat.config.enabled", "e33chat.config.red_dot", "e33chat.config.animation",
-            "e33chat.config.strong_hint", "e33chat.config.mention_strong_hint",
-            "e33chat.config.anti_spam",
-            "e33chat.config.preview_enabled", "e33chat.config.preview_lines", "e33chat.config.preview_width",
-            "e33chat.config.own_bubble_color", "e33chat.config.other_bubble_color", "e33chat.config.own_text_color", "e33chat.config.other_text_color",
-            "e33chat.config.system_chat_as_bubble",
-            "e33chat.config.chat_report_compat",
+        String[] labels = {"opchat.config.enabled", "opchat.config.red_dot", "opchat.config.animation",
+            "opchat.config.strong_hint", "opchat.config.mention_strong_hint",
+            "opchat.config.anti_spam",
+            "opchat.config.preview_enabled", "opchat.config.preview_lines", "opchat.config.preview_width",
+            "opchat.config.own_bubble_color", "opchat.config.other_bubble_color", "opchat.config.own_text_color", "opchat.config.other_text_color",
+            "opchat.config.panel_opacity",
+            "opchat.config.system_chat_as_bubble",
+            "opchat.config.chat_report_compat",
         };
         for (String label : labels) {
             if (y > -ROW_H && y < height)
@@ -189,7 +197,7 @@ public class ChatBubbleConfigScreen extends Screen {
         }
 
         // Section header for compat
-        int compatHeaderY = START_Y + 6 + 13 * ROW_H - scrollOffset - 12;
+        int compatHeaderY = START_Y + 6 + 14 * ROW_H - scrollOffset - 12;
         if (compatHeaderY > -ROW_H && compatHeaderY < height)
             context.drawTextWithShadow(textRenderer, Text.literal("兼容性选项"), LABEL_X, compatHeaderY, 0xFFFFAA00);
 
@@ -214,7 +222,7 @@ public class ChatBubbleConfigScreen extends Screen {
     }
 
     private int calcMaxScroll() {
-        int contentBottom = START_Y + 15 * ROW_H + 10;
+        int contentBottom = START_Y + 16 * ROW_H + 10;
         return Math.max(0, contentBottom - (height - 42));
     }
 

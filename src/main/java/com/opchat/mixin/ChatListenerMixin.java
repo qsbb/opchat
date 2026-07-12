@@ -1,8 +1,8 @@
-package com.niuqu.chatbubble.mixin;
+package com.opchat.mixin;
 
 import com.mojang.authlib.GameProfile;
-import com.niuqu.chatbubble.ChatBubbleConfig;
-import com.niuqu.chatbubble.ChatMessageStore;
+import com.opchat.ChatBubbleConfig;
+import com.opchat.ChatMessageStore;
 import net.minecraft.client.MinecraftClient;
 import net.minecraft.client.network.message.MessageHandler;
 import net.minecraft.network.message.MessageType;
@@ -73,44 +73,60 @@ public class ChatListenerMixin {
             || msgStr.startsWith("xaero_waypoint_add:")) {
             return;
         }
-        Text senderName = params.applyChatDecoration(Text.empty()).getString().isEmpty()
-            ? null : params.name();
-        boolean hasSender = senderName != null;
-        ChatMessageStore.addMessage(message,
-            new UUID(0, 0),
-            hasSender ? senderName : Text.translatable("e33chat.sender.system"),
-            !hasSender);
+        Text paramName = params.name();
+        boolean hasSender = paramName != null && !paramName.getString().isEmpty();
+        if (hasSender) {
+            ChatMessageStore.addMessage(message,
+                new UUID(0, 0),
+                paramName,
+                false);
+        } else if (tryParsePlayerAngleBracket(message)) {
+            // 消息文本本身是 <PlayerName> content 格式，已解析为玩家消息
+        } else {
+            ChatMessageStore.addMessage(message,
+                new UUID(0, 0),
+                Text.translatable("opchat.sender.system"),
+                true);
+        }
     }
 
     @Inject(method = "onGameMessage", at = @At("HEAD"))
     private void onSystemChat(Text message, boolean overlay, CallbackInfo ci) {
         if (overlay) return;
 
-        if (ChatBubbleConfig.CHAT_REPORT_COMPAT) {
-            String text = message.getString();
-            if (text.startsWith("<") && text.contains("> ")) {
-                int endBracket = text.indexOf("> ");
-                String extractedName = text.substring(1, endBracket);
-                String cleanContent = text.substring(endBracket + 2);
-                UUID senderId = ChatMessageStore.lookupPlayerUUID(extractedName);
-                ChatMessageStore.addMessage(Text.literal(cleanContent),
-                    senderId,
-                    Text.literal(extractedName),
-                    false);
-                return;
-            }
-            boolean isSystem = !ChatBubbleConfig.SYSTEM_CHAT_AS_BUBBLE;
-            ChatMessageStore.addMessage(message,
-                new UUID(0, 0),
-                Text.translatable("e33chat.sender.system"),
-                isSystem);
-            return;
-        }
+        // 默认尝试解析 <PlayerName> content 格式的玩家消息
+        // 这种格式在未签名聊天、No Chat Reports、代理服务器等场景下很常见
+        if (tryParsePlayerAngleBracket(message)) return;
 
         boolean isSystem = !ChatBubbleConfig.SYSTEM_CHAT_AS_BUBBLE;
         ChatMessageStore.addMessage(message,
             new UUID(0, 0),
-            Text.translatable("e33chat.sender.system"),
+            Text.translatable("opchat.sender.system"),
             isSystem);
+    }
+
+    // 解析 "<PlayerName> content" 格式的玩家消息
+    // 玩家名只允许字母、数字、下划线，长度 1-16，避免误判真正的系统消息
+    private static boolean tryParsePlayerAngleBracket(Text message) {
+        String text = message.getString();
+        if (!text.startsWith("<")) return false;
+        int endBracket = text.indexOf("> ");
+        if (endBracket <= 1) return false;
+        String extractedName = text.substring(1, endBracket);
+        if (!extractedName.matches("[A-Za-z0-9_]{1,16}")) return false;
+
+        // 检查是否是自己发送消息的回显（避免重复显示）
+        var player = MinecraftClient.getInstance().player;
+        if (player != null && extractedName.equals(player.getName().getString())) {
+            if (ChatMessageStore.consumeEchoIfSenderMatches(extractedName)) return true;
+        }
+
+        String cleanContent = text.substring(endBracket + 2);
+        UUID senderId = ChatMessageStore.lookupPlayerUUID(extractedName);
+        ChatMessageStore.addMessage(Text.literal(cleanContent),
+            senderId,
+            Text.literal(extractedName),
+            false);
+        return true;
     }
 }

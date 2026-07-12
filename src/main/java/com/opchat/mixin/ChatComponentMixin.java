@@ -1,8 +1,8 @@
-package com.niuqu.chatbubble.mixin;
+package com.opchat.mixin;
 
-import com.niuqu.chatbubble.ChatBubbleConfig;
-import com.niuqu.chatbubble.ChatMessageStore;
-import com.niuqu.chatbubble.ChatMessageStore.SenderMeta;
+import com.opchat.ChatBubbleConfig;
+import com.opchat.ChatMessageStore;
+import com.opchat.ChatMessageStore.SenderMeta;
 import net.minecraft.client.font.TextRenderer;
 import net.minecraft.client.gui.DrawContext;
 import net.minecraft.client.gui.hud.ChatHud;

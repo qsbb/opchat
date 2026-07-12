@@ -1,9 +1,9 @@
 {
   "required": true,
   "minVersion": "0.8",
-  "package": "com.niuqu.chatbubble.mixin",
+  "package": "com.opchat.mixin",
   "compatibilityLevel": "JAVA_21",
-  "refmap": "e33chat.refmap.json",
+  "refmap": "opchat.refmap.json",
   "client": [
     "ChatComponentMixin",
     "ChatListenerMixin"
