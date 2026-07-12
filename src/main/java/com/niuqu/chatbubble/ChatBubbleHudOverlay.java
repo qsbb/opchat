@@ -32,8 +32,8 @@ public class ChatBubbleHudOverlay {
         int iconY = screenH - ICON_S - 20;
         int textY = iconY + ICON_S + 1;
 
-        context.getMatrices().push();
-        context.getMatrices().translate(0, 0, 300);
+        RenderSystem.getModelViewStack().pushMatrix();
+        RenderSystem.getModelViewStack().translate(0, 0, 300);
 
         // Strong hint above hotbar
         if (ChatBubbleConfig.STRONG_HINT_ENABLED) {
@@ -119,7 +119,7 @@ public class ChatBubbleHudOverlay {
         int keyX = keyW > ICON_S ? x : x + (ICON_S - keyW) / 2;
         context.drawText(mc.textRenderer, keyDisplay, keyX, textY, 0xFFFFFFFF, false);
 
-        context.getMatrices().pop();
+        RenderSystem.getModelViewStack().popMatrix();
     }
 
     public static boolean isMouseOverIcon(double mx, double my) {

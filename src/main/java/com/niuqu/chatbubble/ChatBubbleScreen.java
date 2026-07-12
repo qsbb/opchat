@@ -368,8 +368,8 @@ public class ChatBubbleScreen extends Screen {
         if (overlayAlpha != 0)
             context.fill(panelX + panelW + panelOffset, 0, width, height, overlayAlpha | 0x000000);
 
-        context.getMatrices().push();
-        context.getMatrices().translate(panelOffset, 0, 0);
+        RenderSystem.getModelViewStack().pushMatrix();
+        RenderSystem.getModelViewStack().translate(panelOffset, 0, 0);
 
         context.fill(panelX, 0, panelX + panelW, height, COLOR_PANEL_BG);
 
@@ -389,7 +389,7 @@ public class ChatBubbleScreen extends Screen {
         if (commandSuggestions != null) commandSuggestions.render(context, mouseX, mouseY);
         context.disableScissor();
 
-        context.getMatrices().pop();
+        RenderSystem.getModelViewStack().popMatrix();
 
         super.render(context, mouseX, mouseY, delta);
     }
