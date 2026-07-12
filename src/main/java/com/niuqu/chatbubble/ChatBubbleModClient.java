@@ -16,11 +16,10 @@ public class ChatBubbleModClient implements ClientModInitializer {
         ChatBubbleConfig.load();
 
         // Intercept vanilla ChatScreen opening
-        ScreenEvents.BEFORE_INIT.register((client, screen, scaledWidth, scaledHeight) -> {
+        ScreenEvents.AFTER_INIT.register((client, screen, scaledWidth, scaledHeight) -> {
             if (!ChatBubbleConfig.ENABLED) return;
-            if (screen instanceof ChatScreen chatScreen) {
-                ScreenEvents.remove(screen).register(removed -> {});
-                // Replace with our screen
+            if (screen instanceof ChatScreen) {
+                // Replace with our screen after vanilla ChatScreen is fully initialized
                 client.setScreen(new ChatBubbleScreen(""));
             }
         });
