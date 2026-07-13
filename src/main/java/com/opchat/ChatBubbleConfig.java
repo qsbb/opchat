@@ -24,7 +24,7 @@ public class ChatBubbleConfig {
     public static boolean ENABLED = true;
     public static boolean RED_DOT_ENABLED = true;
     public static boolean ANIMATION_ENABLED = true;
-    public static int PANEL_OPACITY = 93;
+    public static int PANEL_OPACITY = 30;
     public static boolean STRONG_HINT_ENABLED = true;
     public static boolean MENTION_STRONG_HINT_ENABLED = true;
     public static boolean SYSTEM_CHAT_AS_BUBBLE = false;
@@ -257,7 +257,7 @@ public class ChatBubbleConfig {
         boolean enabled = true;
         boolean red_dot = true;
         boolean animation = true;
-        int panel_opacity = 93;
+        int panel_opacity = 30;
         boolean strong_hint = true;
         boolean mention_strong_hint = true;
         boolean system_chat_as_bubble = false;

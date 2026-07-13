@@ -874,6 +874,7 @@ public class ChatBubbleScreen extends Screen {
             String name = entry.getProfile().name();
             if (name != null && !name.equals(selfName)) onlineSet.add(name);
         }
+        java.util.Set<String> allOnline = new java.util.HashSet<>(onlineSet);
 
         // Group headers + members
         for (var group : ChatBubbleConfig.CONTACT_GROUPS) {
@@ -915,7 +916,7 @@ public class ChatBubbleScreen extends Screen {
 
         // Offline recent whisper contacts (keep conversations accessible)
         for (String contact : WhisperHistory.getRecentContacts()) {
-            if (!WhisperHistory.isHidden(contact) && !onlineSet.contains(contact)) {
+            if (!WhisperHistory.isHidden(contact) && !allOnline.contains(contact)) {
                 entries.add(new SidebarEntry(5, contact, null, 0));
             }
         }
@@ -1055,6 +1056,7 @@ public class ChatBubbleScreen extends Screen {
                     for (var g : ChatBubbleConfig.CONTACT_GROUPS) {
                         if (g.name.equals(entry.groupName())) {
                             g.expanded = !g.expanded;
+                            cachedSidebarEntries = null;
                             return;
                         }
                     }
@@ -1062,6 +1064,7 @@ public class ChatBubbleScreen extends Screen {
                 }
                 if (entry.kind() == 4) {
                     hiddenGroupExpanded = !hiddenGroupExpanded;
+                    cachedSidebarEntries = null;
                     return;
                 }
                 String name = entry.name();

@@ -25,7 +25,7 @@ public class ChatBubbleConfigScreen extends Screen {
     private int selectedCategory = 0;
     private static final String[] CATEGORIES = {
         "\u57fa\u7840", "\u6d88\u606f\u63d0\u793a", "\u6d88\u606f\u9884\u89c8",
-        "\u6c14\u6ce1\u5916\u89c2", "\u79c1\u804a\u4e0e\u5386\u53f2", "\u5feb\u6377\u6307\u4ee4",
+        "\u5916\u89c2", "\u79c1\u804a\u4e0e\u5386\u53f2", "\u5feb\u6377\u6307\u4ee4",
         "\u517c\u5bb9\u6027", "\u8054\u7cfb\u4eba\u5206\u7ec4"
     };
 
@@ -86,7 +86,7 @@ public class ChatBubbleConfigScreen extends Screen {
                 y = addIntInput(y, rightBase, inputX, "opchat.config.preview_width", String.valueOf(ChatBubbleConfig.PREVIEW_WIDTH), 50, 400, v -> ChatBubbleConfig.PREVIEW_WIDTH = v);
             }
             case 3 -> {
-                y = addSection(y, rightBase, "\u6c14\u6ce1\u5916\u89c2");
+                y = addSection(y, rightBase, "\u5916\u89c2");
                 y = addHexInput(y, rightBase, inputX, previewX, "opchat.config.own_bubble_color", ChatBubbleConfig.OWN_BUBBLE_COLOR, v -> ChatBubbleConfig.OWN_BUBBLE_COLOR = v);
                 y = addHexInput(y, rightBase, inputX, previewX, "opchat.config.other_bubble_color", ChatBubbleConfig.OTHER_BUBBLE_COLOR, v -> ChatBubbleConfig.OTHER_BUBBLE_COLOR = v);
                 y = addHexInput(y, rightBase, inputX, previewX, "opchat.config.own_text_color", ChatBubbleConfig.OWN_TEXT_COLOR, v -> ChatBubbleConfig.OWN_TEXT_COLOR = v);
