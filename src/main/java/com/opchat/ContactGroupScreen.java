@@ -22,6 +22,7 @@ public class ContactGroupScreen extends Screen {
     private final List<ClickableWidget> scrollableWidgets = new ArrayList<>();
     private final List<Integer> widgetBaseY = new ArrayList<>();
     private TextFieldWidget newGroupField;
+    private String pendingDelete = null;
 
     public ContactGroupScreen(Screen lastScreen) {
         super(Text.literal("\u8054\u7cfb\u4eba\u5206\u7ec4"));
@@ -61,11 +62,19 @@ public class ContactGroupScreen extends Screen {
             widgetBaseY.add(y + scrollOffset);
 
             final String gName = group.name;
-            ButtonWidget delBtn = ButtonWidget.builder(Text.literal("\u2715"), b -> {
-                ChatBubbleConfig.removeGroup(gName);
-                ChatBubbleConfig.save();
-                clearAndReinit();
-            }).dimensions(INPUT_X + fieldW + 5, y, 35, 20).build();
+            boolean isConfirming = gName.equals(pendingDelete);
+            ButtonWidget delBtn = ButtonWidget.builder(
+                Text.literal(isConfirming ? "\u786e\u8ba4?" : "\u2715"), b -> {
+                    if (gName.equals(pendingDelete)) {
+                        ChatBubbleConfig.removeGroup(gName);
+                        ChatBubbleConfig.save();
+                        pendingDelete = null;
+                        clearAndReinit();
+                    } else {
+                        pendingDelete = gName;
+                        clearAndReinit();
+                    }
+                }).dimensions(INPUT_X + fieldW + 5, y, 35, 20).build();
             addDrawableChild(delBtn);
             scrollableWidgets.add(delBtn);
             widgetBaseY.add(y + scrollOffset);

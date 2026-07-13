@@ -133,8 +133,9 @@ public class ChatBubbleScreen extends Screen {
     private int quickCmdEditIndex = -1;
     private TextFieldWidget quickCmdDisplayField;
     private TextFieldWidget quickCmdCommandField;
-    private TextFieldWidget proxyCmdField; // invisible proxy for ChatInputSuggestor (handles @* → @a)
+    private TextFieldWidget proxyCmdField; // invisible proxy for ChatInputSuggestor (handles @* → aa)
     private boolean syncingProxy = false;
+    private int[] proxyPlaceholderStarts = new int[0]; // positions of "aa" that replace @*
     private ChatInputSuggestor quickCmdSuggestor;
     private static final int QUICK_CMD_PANEL_W = 200;
     private static final int QUICK_CMD_ITEM_H = 18;
@@ -235,10 +236,22 @@ public class ChatBubbleScreen extends Screen {
         quickCmdCommandField.setChangedListener(text -> {
             if (syncingProxy) return;
             if (quickCmdSuggestor != null) {
-                String proxyText = text.replace("@*", "aa");
+                java.util.List<Integer> starts = new java.util.ArrayList<>();
+                StringBuilder proxyText = new StringBuilder();
+                for (int i = 0; i < text.length(); ) {
+                    if (i + 1 < text.length() && text.charAt(i) == '@' && text.charAt(i + 1) == '*') {
+                        starts.add(proxyText.length());
+                        proxyText.append("aa");
+                        i += 2;
+                    } else {
+                        proxyText.append(text.charAt(i));
+                        i++;
+                    }
+                }
+                proxyPlaceholderStarts = starts.stream().mapToInt(Integer::intValue).toArray();
                 int cursor = quickCmdCommandField.getCursor();
                 syncingProxy = true;
-                proxyCmdField.setText(proxyText);
+                proxyCmdField.setText(proxyText.toString());
                 proxyCmdField.setCursor(cursor, false);
                 syncingProxy = false;
                 quickCmdSuggestor.setWindowActive(text.startsWith("/"));
@@ -254,7 +267,19 @@ public class ChatBubbleScreen extends Screen {
         proxyCmdField.setVisible(false);
         proxyCmdField.setChangedListener(text -> {
             if (syncingProxy) return;
-            String cmdText = text.replace("aa", "@*");
+            String cmdText;
+            if (proxyPlaceholderStarts.length == 0) {
+                cmdText = text;
+            } else {
+                StringBuilder cmd = new StringBuilder(text);
+                for (int i = proxyPlaceholderStarts.length - 1; i >= 0; i--) {
+                    int pos = proxyPlaceholderStarts[i];
+                    if (pos + 2 <= cmd.length() && cmd.charAt(pos) == 'a' && cmd.charAt(pos + 1) == 'a') {
+                        cmd.replace(pos, pos + 2, "@*");
+                    }
+                }
+                cmdText = cmd.toString();
+            }
             int cursor = proxyCmdField.getCursor();
             syncingProxy = true;
             quickCmdCommandField.setText(cmdText);
@@ -317,6 +342,7 @@ public class ChatBubbleScreen extends Screen {
         if (copyToastTicks > 0) copyToastTicks--;
         if (closing && net.minecraft.util.Util.getMeasuringTimeMs() - animStart >= ANIM_MS)
             client.setScreen(null);
+        if (sidebarCacheTick++ % 20 == 0) cachedSidebarEntries = null;
     }
 
     private float getAnimProgress() {
@@ -833,8 +859,11 @@ public class ChatBubbleScreen extends Screen {
         super.render(context, mouseX, mouseY, delta);
     }
 
-    private record SidebarEntry(int kind, String name, String groupName) {}
+    private record SidebarEntry(int kind, String name, String groupName, int count) {}
     // kind: 0=group_header, 1=group_contact, 2=contact, 3=hidden, 4=hidden_group_header, 5=offline_contact
+
+    private java.util.List<SidebarEntry> cachedSidebarEntries = null;
+    private int sidebarCacheTick = 0;
 
     private java.util.List<SidebarEntry> getSidebarEntries() {
         java.util.List<SidebarEntry> entries = new java.util.ArrayList<>();
@@ -848,18 +877,18 @@ public class ChatBubbleScreen extends Screen {
 
         // Group headers + members
         for (var group : ChatBubbleConfig.CONTACT_GROUPS) {
-            entries.add(new SidebarEntry(0, null, group.name));
+            java.util.List<String> members = ChatBubbleConfig.getGroupOnlineMembers(group, onlineSet);
+            int onlineCount = 0;
+            for (String m : members) { if (!WhisperHistory.isHidden(m)) onlineCount++; }
+            entries.add(new SidebarEntry(0, null, group.name, onlineCount));
             if (group.expanded) {
-                java.util.List<String> members = ChatBubbleConfig.getGroupOnlineMembers(group, onlineSet);
                 for (String m : members) {
                     if (!WhisperHistory.isHidden(m)) {
                         onlineSet.remove(m);
-                        entries.add(new SidebarEntry(1, m, group.name));
+                        entries.add(new SidebarEntry(1, m, group.name, 0));
                     }
                 }
             } else {
-                // Remove group members from onlineSet so they don't appear in regular list
-                java.util.List<String> members = ChatBubbleConfig.getGroupOnlineMembers(group, onlineSet);
                 for (String m : members) {
                     if (!WhisperHistory.isHidden(m)) onlineSet.remove(m);
                 }
@@ -869,12 +898,12 @@ public class ChatBubbleScreen extends Screen {
         // Pinned contacts first (only if online and not hidden)
         for (String contact : WhisperHistory.getPinnedContacts()) {
             if (!WhisperHistory.isHidden(contact) && onlineSet.remove(contact))
-                entries.add(new SidebarEntry(2, contact, null));
+                entries.add(new SidebarEntry(2, contact, null, 0));
         }
         // Recent whisper contacts (most recent at top)
         for (String contact : WhisperHistory.getRecentContacts()) {
             if (!WhisperHistory.isHidden(contact) && onlineSet.remove(contact))
-                entries.add(new SidebarEntry(2, contact, null));
+                entries.add(new SidebarEntry(2, contact, null, 0));
         }
         // Remaining online players, sorted alphabetically (excluding hidden)
         java.util.List<String> rest = new java.util.ArrayList<>();
@@ -882,18 +911,12 @@ public class ChatBubbleScreen extends Screen {
             if (!WhisperHistory.isHidden(name)) rest.add(name);
         }
         java.util.Collections.sort(rest);
-        for (String name : rest) entries.add(new SidebarEntry(2, name, null));
+        for (String name : rest) entries.add(new SidebarEntry(2, name, null, 0));
 
         // Offline recent whisper contacts (keep conversations accessible)
-        java.util.Set<String> onlineLookup = new java.util.HashSet<>();
-        String selfName2 = client.player != null ? client.player.getName().getString() : "";
-        for (var entry2 : client.getNetworkHandler().getPlayerList()) {
-            String n = entry2.getProfile().name();
-            if (n != null && !n.equals(selfName2)) onlineLookup.add(n);
-        }
         for (String contact : WhisperHistory.getRecentContacts()) {
-            if (!WhisperHistory.isHidden(contact) && !onlineLookup.contains(contact)) {
-                entries.add(new SidebarEntry(5, contact, null));
+            if (!WhisperHistory.isHidden(contact) && !onlineSet.contains(contact)) {
+                entries.add(new SidebarEntry(5, contact, null, 0));
             }
         }
 
@@ -901,14 +924,19 @@ public class ChatBubbleScreen extends Screen {
         java.util.List<String> allHidden = new java.util.ArrayList<>(WhisperHistory.getHiddenContacts());
         if (!allHidden.isEmpty()) {
             java.util.Collections.sort(allHidden);
-            entries.add(new SidebarEntry(4, null, Text.translatable("opchat.contact.hidden_group").getString()));
+            entries.add(new SidebarEntry(4, null, Text.translatable("opchat.contact.hidden_group").getString(), allHidden.size()));
             if (hiddenGroupExpanded) {
                 for (String name : allHidden) {
-                    entries.add(new SidebarEntry(3, name, null));
+                    entries.add(new SidebarEntry(3, name, null, 0));
                 }
             }
         }
         return entries;
+    }
+
+    private java.util.List<SidebarEntry> getCachedSidebarEntries() {
+        if (cachedSidebarEntries == null) cachedSidebarEntries = getSidebarEntries();
+        return cachedSidebarEntries;
     }
 
     private void renderSidebar(DrawContext context, int mouseX, int mouseY) {
@@ -936,7 +964,7 @@ public class ChatBubbleScreen extends Screen {
         itemY += 3;
 
         // Sidebar entries (bot group + contacts)
-        java.util.List<SidebarEntry> entries = getSidebarEntries();
+        java.util.List<SidebarEntry> entries = getCachedSidebarEntries();
         int sidebarBottom = barTop - 4;
         int availableH = sidebarBottom - itemY;
         int maxItems = Math.max(0, availableH / SIDEBAR_ITEM_H);
@@ -955,27 +983,16 @@ public class ChatBubbleScreen extends Screen {
                     context.fill(sx, iy, sx + sw, iy + SIDEBAR_ITEM_H, 0xFF333333);
                 var group = ChatBubbleConfig.CONTACT_GROUPS.stream()
                     .filter(g -> g.name.equals(entry.groupName())).findFirst().orElse(null);
-                int count = 0;
-                if (group != null && client.getNetworkHandler() != null) {
-                    java.util.Set<String> onlineSet = new java.util.HashSet<>();
-                    String selfName = client.player != null ? client.player.getName().getString() : "";
-                    for (var pe : client.getNetworkHandler().getPlayerList()) {
-                        String n = pe.getProfile().name();
-                        if (n != null && !n.equals(selfName)) onlineSet.add(n);
-                    }
-                    count = ChatBubbleConfig.getGroupOnlineMembers(group, onlineSet).size();
-                }
                 String arrow = group != null && group.expanded ? "\u25BC" : "\u25B6";
-                String headerText = arrow + " " + entry.groupName() + " (" + count + ")";
+                String headerText = arrow + " " + entry.groupName() + " (" + entry.count() + ")";
                 context.drawText(textRenderer, Text.literal(headerText), sx + 4,
                     iy + (SIDEBAR_ITEM_H - textRenderer.fontHeight) / 2, 0xFFFFAA00, false);
             } else if (entry.kind() == 4) {
                 // Hidden group header
                 if (hover)
                     context.fill(sx, iy, sx + sw, iy + SIDEBAR_ITEM_H, 0xFF333333);
-                int count = WhisperHistory.getHiddenContacts().size();
                 String arrow = hiddenGroupExpanded ? "\u25BC" : "\u25B6";
-                String headerText = arrow + " " + entry.groupName() + " (" + count + ")";
+                String headerText = arrow + " " + entry.groupName() + " (" + entry.count() + ")";
                 context.drawText(textRenderer, Text.literal(headerText), sx + 4,
                     iy + (SIDEBAR_ITEM_H - textRenderer.fontHeight) / 2, 0xFF888888, false);
             } else {
@@ -991,9 +1008,9 @@ public class ChatBubbleScreen extends Screen {
                 int avatarSize = SIDEBAR_ITEM_H - 4;
                 int avatarX = sx + 2 + indent;
                 int avatarY = iy + (SIDEBAR_ITEM_H - avatarSize) / 2;
-                UUID uuid = getUuidForName(name);
+                UUID uuid = AvatarHelper.getUuidForName(name);
                 if (uuid != null) {
-                    renderPlayerSkin(context, uuid, avatarX, avatarY, avatarSize);
+                    AvatarHelper.renderSkin(context, uuid, avatarX, avatarY, avatarSize);
                 } else {
                     context.fill(avatarX, avatarY, avatarX + avatarSize, avatarY + avatarSize, 0xFF333333);
                 }
@@ -1025,7 +1042,7 @@ public class ChatBubbleScreen extends Screen {
         }
         itemY += SIDEBAR_ITEM_H + 2 + 3;
 
-        java.util.List<SidebarEntry> entries = getSidebarEntries();
+        java.util.List<SidebarEntry> entries = getCachedSidebarEntries();
         int sidebarBottom = barTop - 4;
         int availableH = sidebarBottom - itemY;
         int maxItems = Math.max(0, availableH / SIDEBAR_ITEM_H);
@@ -1061,7 +1078,7 @@ public class ChatBubbleScreen extends Screen {
 
     private void handleSidebarRightClick(int mx, int my) {
         int itemY = SIDEBAR_TOP + SIDEBAR_ITEM_H + 2 + 3;
-        java.util.List<SidebarEntry> entries = getSidebarEntries();
+        java.util.List<SidebarEntry> entries = getCachedSidebarEntries();
         int sidebarBottom = barTop - 4;
         int availableH = sidebarBottom - itemY;
         int maxItems = Math.max(0, availableH / SIDEBAR_ITEM_H);
@@ -1382,7 +1399,7 @@ public class ChatBubbleScreen extends Screen {
         }
 
         // Draw player skin
-        renderPlayerSkin(context, msg.senderUUID(), avatarX, avatarY);
+        AvatarHelper.renderSkin(context, msg.senderUUID(), avatarX, avatarY);
 
         if (msg.duplicateCount() > 1) {
             String label = "x" + msg.duplicateCount();
@@ -1397,47 +1414,6 @@ public class ChatBubbleScreen extends Screen {
         }
 
         bubbleRects.add(new int[]{bubbleX, bubbleY, bubbleW, bubbleH, index});
-    }
-
-    private static final java.util.Map<UUID, Identifier> skinCache = new java.util.HashMap<>();
-    private static final java.util.Map<String, UUID> nameToUuidCache = new java.util.HashMap<>();
-
-    private void renderPlayerSkin(DrawContext context, UUID uuid, int x, int y) {
-        renderPlayerSkin(context, uuid, x, y, AVATAR);
-    }
-
-    private void renderPlayerSkin(DrawContext context, UUID uuid, int x, int y, int size) {
-        Identifier skin = null;
-        if (client.getNetworkHandler() != null) {
-            var entry = client.getNetworkHandler().getPlayerListEntry(uuid);
-            if (entry != null) {
-                skin = entry.getSkinTextures().body().texturePath();
-                if (skin != null) skinCache.put(uuid, skin);
-            }
-        }
-        if (skin == null) skin = skinCache.get(uuid);
-        if (skin == null) skin = Identifier.of("textures/entity/player/slim/steve.png");
-        context.drawTexture(RenderPipelines.GUI_TEXTURED, skin, x, y, 8.0f, 8.0f, size, size, 8, 8, 64, 64);
-        context.drawTexture(RenderPipelines.GUI_TEXTURED, skin, x, y, 40.0f, 8.0f, size, size, 8, 8, 64, 64);
-    }
-
-    private UUID getUuidForName(String name) {
-        if (name == null || name.isEmpty()) return null;
-        UUID cached = nameToUuidCache.get(name);
-        if (cached != null) return cached;
-        if (client.getNetworkHandler() != null) {
-            for (var entry : client.getNetworkHandler().getPlayerList()) {
-                String n = entry.getProfile().name();
-                if (name.equals(n)) {
-                    UUID id = entry.getProfile().id();
-                    if (id != null) {
-                        nameToUuidCache.put(name, id);
-                        return id;
-                    }
-                }
-            }
-        }
-        return null;
     }
 
     private void renderLineWithClicks(DrawContext context, OrderedText line,
