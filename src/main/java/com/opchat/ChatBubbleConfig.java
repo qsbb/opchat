@@ -10,8 +10,10 @@ import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashMap;
 import java.util.HashSet;
 import java.util.List;
+import java.util.Map;
 import java.util.Set;
 
 public class ChatBubbleConfig {
@@ -38,9 +40,9 @@ public class ChatBubbleConfig {
     public static String OTHER_TEXT_COLOR = "#FFFFFF";
     public static List<String> QUICK_INPUTS = new ArrayList<>();
     public static List<QuickCommand> QUICK_COMMANDS = new ArrayList<>();
-    public static List<ContactGroup> CONTACT_GROUPS = new ArrayList<>(List.of(
-        new ContactGroup("假人", List.of(), List.of("bot_", "Bot_", "BOT_"))
-    ));
+    public static boolean MULTI_MODE_COMMANDS = false;
+    public static Map<String, List<QuickCommand>> QUICK_COMMANDS_BY_MODE = new HashMap<>();
+    public static List<ContactGroup> CONTACT_GROUPS = new ArrayList<>();
 
     public static class QuickCommand {
         public String display = "";
@@ -200,9 +202,9 @@ public class ChatBubbleConfig {
         OTHER_TEXT_COLOR = data.other_text_color;
         QUICK_INPUTS = data.quick_inputs != null ? new ArrayList<>(data.quick_inputs) : new ArrayList<>();
         QUICK_COMMANDS = data.quick_commands != null ? new ArrayList<>(data.quick_commands) : new ArrayList<>();
-        CONTACT_GROUPS = data.contact_groups != null ? new ArrayList<>(data.contact_groups) : new ArrayList<>(List.of(
-            new ContactGroup("假人", List.of(), List.of("bot_", "Bot_", "BOT_"))
-        ));
+        MULTI_MODE_COMMANDS = data.multi_mode_commands;
+        QUICK_COMMANDS_BY_MODE = data.quick_commands_by_mode != null ? new HashMap<>(data.quick_commands_by_mode) : new HashMap<>();
+        CONTACT_GROUPS = data.contact_groups != null ? new ArrayList<>(data.contact_groups) : new ArrayList<>();
     }
 
     private static void updateData() {
@@ -225,7 +227,20 @@ public class ChatBubbleConfig {
         data.other_text_color = OTHER_TEXT_COLOR;
         data.quick_inputs = QUICK_INPUTS;
         data.quick_commands = QUICK_COMMANDS;
+        data.multi_mode_commands = MULTI_MODE_COMMANDS;
+        data.quick_commands_by_mode = QUICK_COMMANDS_BY_MODE;
         data.contact_groups = CONTACT_GROUPS;
+    }
+
+    public static List<QuickCommand> getActiveQuickCommands(String modeKey) {
+        if (!MULTI_MODE_COMMANDS || modeKey == null) return QUICK_COMMANDS;
+        List<QuickCommand> modeCmds = QUICK_COMMANDS_BY_MODE.get(modeKey);
+        return modeCmds != null ? modeCmds : QUICK_COMMANDS;
+    }
+
+    public static List<QuickCommand> getOrCreateModeCommands(String modeKey) {
+        if (modeKey == null) return QUICK_COMMANDS;
+        return QUICK_COMMANDS_BY_MODE.computeIfAbsent(modeKey, k -> new ArrayList<>());
     }
 
     public static int parseHexColor(String hex, int defaultColor) {
@@ -258,8 +273,8 @@ public class ChatBubbleConfig {
         String other_text_color = "#FFFFFF";
         List<String> quick_inputs = new ArrayList<>();
         List<QuickCommand> quick_commands = new ArrayList<>();
-        List<ContactGroup> contact_groups = new ArrayList<>(List.of(
-            new ContactGroup("假人", List.of(), List.of("bot_", "Bot_", "BOT_"))
-        ));
+        boolean multi_mode_commands = false;
+        Map<String, List<QuickCommand>> quick_commands_by_mode = new HashMap<>();
+        List<ContactGroup> contact_groups = new ArrayList<>();
     }
 }

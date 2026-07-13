@@ -2,32 +2,38 @@ package com.opchat;
 
 import java.util.ArrayList;
 import java.util.List;
+import java.util.function.Consumer;
 import java.util.function.Supplier;
 import net.minecraft.client.gui.DrawContext;
-import net.minecraft.client.gui.Element;
 import net.minecraft.client.gui.screen.Screen;
 import net.minecraft.client.gui.widget.ButtonWidget;
+import net.minecraft.client.gui.widget.ClickableWidget;
 import net.minecraft.client.gui.widget.TextFieldWidget;
 import net.minecraft.text.Text;
-import net.minecraft.util.math.MathHelper;
 
 public class ChatBubbleConfigScreen extends Screen {
     private final Screen lastScreen;
-    private static final int LABEL_X = 40;
-    private static final int INPUT_X = 175;
+    private static final int LEFT_W = 120;
+    private static final int LEFT_ITEM_H = 22;
+    private static final int LABEL_X_OFFSET = 20;
+    private static final int INPUT_X_OFFSET = 175;
     private static final int INPUT_W = 130;
-    private static final int PREVIEW_X = 315;
-    private static final int ROW_H = 26;
-    private static final int SECTION_H = 24;
-    private static final int START_Y = 36;
+    private static final int PREVIEW_X_OFFSET = 315;
+    private static final int ROW_H = 28;
+    private static final int START_Y = 50;
 
-    private int scrollOffset;
-    private final List<Element> scrollWidgets = new ArrayList<>();
-    private final List<Integer> widgetBaseY = new ArrayList<>();
+    private int selectedCategory = 0;
+    private static final String[] CATEGORIES = {
+        "\u57fa\u7840", "\u6d88\u606f\u63d0\u793a", "\u6d88\u606f\u9884\u89c8",
+        "\u6c14\u6ce1\u5916\u89c2", "\u79c1\u804a\u4e0e\u5386\u53f2", "\u5feb\u6377\u6307\u4ee4",
+        "\u517c\u5bb9\u6027", "\u8054\u7cfb\u4eba\u5206\u7ec4"
+    };
 
-    // kind: 0=section_header, 1=label, 2=label_with_color_preview
-    private record RenderRow(int baseY, String text, int kind, Supplier<String> colorSupplier) {}
-    private final List<RenderRow> renderRows = new ArrayList<>();
+    private final List<ClickableWidget> rightWidgets = new ArrayList<>();
+    private final List<RenderEntry> renderEntries = new ArrayList<>();
+
+    private record RenderEntry(int y, String text, int kind, Supplier<String> colorSupplier) {}
+    // kind: 0=section_title, 1=label, 2=label_with_color_preview
 
     public ChatBubbleConfigScreen(Screen lastScreen) {
         super(Text.translatable("opchat.config.title"));
@@ -36,100 +42,92 @@ public class ChatBubbleConfigScreen extends Screen {
 
     @Override
     protected void init() {
-        scrollWidgets.clear();
-        widgetBaseY.clear();
-        renderRows.clear();
-        scrollOffset = MathHelper.clamp(scrollOffset, 0, calcMaxScroll());
-        int y = START_Y - scrollOffset;
-
-        y = addSection(y, "\u57fa\u7840\u8bbe\u7f6e");
-        y = addToggle(y, "opchat.config.enabled", ChatBubbleConfig.ENABLED, val -> ChatBubbleConfig.ENABLED = val);
-        y = addToggle(y, "opchat.config.red_dot", ChatBubbleConfig.RED_DOT_ENABLED, val -> ChatBubbleConfig.RED_DOT_ENABLED = val);
-        y = addToggle(y, "opchat.config.animation", ChatBubbleConfig.ANIMATION_ENABLED, val -> ChatBubbleConfig.ANIMATION_ENABLED = val);
-
-        y = addSection(y, "\u6d88\u606f\u63d0\u793a");
-        y = addToggle(y, "opchat.config.strong_hint", ChatBubbleConfig.STRONG_HINT_ENABLED, val -> ChatBubbleConfig.STRONG_HINT_ENABLED = val);
-        y = addToggle(y, "opchat.config.mention_strong_hint", ChatBubbleConfig.MENTION_STRONG_HINT_ENABLED, val -> ChatBubbleConfig.MENTION_STRONG_HINT_ENABLED = val);
-        y = addToggle(y, "opchat.config.anti_spam", ChatBubbleConfig.ANTI_SPAM, val -> ChatBubbleConfig.ANTI_SPAM = val);
-
-        y = addSection(y, "\u6d88\u606f\u9884\u89c8");
-        y = addToggle(y, "opchat.config.preview_enabled", ChatBubbleConfig.PREVIEW_ENABLED, val -> ChatBubbleConfig.PREVIEW_ENABLED = val);
-        y = addCycle(y, "opchat.config.preview_lines", String.valueOf(ChatBubbleConfig.PREVIEW_LINES), b -> {
-            ChatBubbleConfig.PREVIEW_LINES = (ChatBubbleConfig.PREVIEW_LINES % 3) + 1;
-            b.setMessage(Text.literal(String.valueOf(ChatBubbleConfig.PREVIEW_LINES)));
-            ChatBubbleConfig.save();
-        });
-        y = addIntInput(y, "opchat.config.preview_width", String.valueOf(ChatBubbleConfig.PREVIEW_WIDTH), 50, 400, val -> ChatBubbleConfig.PREVIEW_WIDTH = val);
-
-        y = addSection(y, "\u6c14\u6ce1\u5916\u89c2");
-        y = addHexInput(y, "opchat.config.own_bubble_color", ChatBubbleConfig.OWN_BUBBLE_COLOR, val -> ChatBubbleConfig.OWN_BUBBLE_COLOR = val);
-        y = addHexInput(y, "opchat.config.other_bubble_color", ChatBubbleConfig.OTHER_BUBBLE_COLOR, val -> ChatBubbleConfig.OTHER_BUBBLE_COLOR = val);
-        y = addHexInput(y, "opchat.config.own_text_color", ChatBubbleConfig.OWN_TEXT_COLOR, val -> ChatBubbleConfig.OWN_TEXT_COLOR = val);
-        y = addHexInput(y, "opchat.config.other_text_color", ChatBubbleConfig.OTHER_TEXT_COLOR, val -> ChatBubbleConfig.OTHER_TEXT_COLOR = val);
-        y = addIntInput(y, "opchat.config.panel_opacity", String.valueOf(ChatBubbleConfig.PANEL_OPACITY), 0, 100, val -> ChatBubbleConfig.PANEL_OPACITY = val);
-
-        y = addSection(y, "\u79c1\u804a\u4e0e\u5386\u53f2");
-        y = addIntInput(y, "opchat.config.whisper_history_days", String.valueOf(ChatBubbleConfig.WHISPER_HISTORY_DAYS), 0, 365, val -> ChatBubbleConfig.WHISPER_HISTORY_DAYS = val);
-
-        y = addSection(y, "\u517c\u5bb9\u6027");
-        y = addToggle(y, "opchat.config.system_chat_as_bubble", ChatBubbleConfig.SYSTEM_CHAT_AS_BUBBLE, val -> ChatBubbleConfig.SYSTEM_CHAT_AS_BUBBLE = val);
-        y = addToggle(y, "opchat.config.chat_report_compat", ChatBubbleConfig.CHAT_REPORT_COMPAT, val -> ChatBubbleConfig.CHAT_REPORT_COMPAT = val);
-
-        y = addSection(y, "\u8054\u7cfb\u4eba\u5206\u7ec4");
-        for (var group : ChatBubbleConfig.CONTACT_GROUPS) {
-            renderRows.add(new RenderRow(y + scrollOffset, group.name + " \u524d\u7f00", 1, null));
-            TextFieldWidget box = new TextFieldWidget(textRenderer, INPUT_X, y, INPUT_W, 20, Text.literal(""));
-            box.setText(String.join(",", group.prefixes));
-            box.setMaxLength(100);
-            final String groupName = group.name;
-            box.setChangedListener(s -> {
-                java.util.List<String> prefixes = new java.util.ArrayList<>();
-                for (String p : s.split(",")) {
-                    p = p.trim();
-                    if (!p.isEmpty()) prefixes.add(p);
-                }
-                for (var g : ChatBubbleConfig.CONTACT_GROUPS) {
-                    if (g.name.equals(groupName)) {
-                        g.prefixes = prefixes;
-                        ChatBubbleConfig.save();
-                        break;
-                    }
-                }
-            });
-            scrollWidgets.add(addDrawableChild(box));
-            widgetBaseY.add(y + scrollOffset);
-            y += ROW_H;
+        rightWidgets.clear();
+        renderEntries.clear();
+        int leftX = 0;
+        for (int i = 0; i < CATEGORIES.length; i++) {
+            final int idx = i;
+            int itemY = START_Y + i * LEFT_ITEM_H;
+            ButtonWidget btn = ButtonWidget.builder(Text.literal(CATEGORIES[i]), b -> {
+                selectedCategory = idx;
+                clearChildren();
+                init();
+            }).dimensions(leftX + 2, itemY, LEFT_W - 4, LEFT_ITEM_H - 2).build();
+            btn.active = (i != selectedCategory);
+            addDrawableChild(btn);
         }
 
-        renderRows.add(new RenderRow(y + scrollOffset, "\u65b0\u5efa\u5206\u7ec4", 1, null));
-        {
-            TextFieldWidget box = new TextFieldWidget(textRenderer, INPUT_X, y, INPUT_W - 36, 20, Text.literal(""));
-            box.setMaxLength(20);
-            box.setPlaceholder(Text.literal("\u5206\u7ec4\u540d..."));
-            scrollWidgets.add(addDrawableChild(box));
-            widgetBaseY.add(y + scrollOffset);
-            final TextFieldWidget boxRef = box;
-            addDrawableChild(ButtonWidget.builder(Text.literal("+"), b -> {
-                String name = boxRef.getText().trim();
-                if (!name.isEmpty()) {
-                    ChatBubbleConfig.addGroup(name);
-                    boxRef.setText("");
-                    init();
-                }
-            }).dimensions(INPUT_X + INPUT_W - 31, y, 31, 20).build());
+        int rightBase = LEFT_W + LABEL_X_OFFSET;
+        int inputX = LEFT_W + INPUT_X_OFFSET;
+        int previewX = LEFT_W + PREVIEW_X_OFFSET;
+        int y = START_Y;
+
+        switch (selectedCategory) {
+            case 0 -> {
+                y = addSection(y, rightBase, "\u57fa\u7840\u8bbe\u7f6e");
+                y = addToggle(y, rightBase, inputX, "opchat.config.enabled", ChatBubbleConfig.ENABLED, v -> ChatBubbleConfig.ENABLED = v);
+                y = addToggle(y, rightBase, inputX, "opchat.config.red_dot", ChatBubbleConfig.RED_DOT_ENABLED, v -> ChatBubbleConfig.RED_DOT_ENABLED = v);
+                y = addToggle(y, rightBase, inputX, "opchat.config.animation", ChatBubbleConfig.ANIMATION_ENABLED, v -> ChatBubbleConfig.ANIMATION_ENABLED = v);
+            }
+            case 1 -> {
+                y = addSection(y, rightBase, "\u6d88\u606f\u63d0\u793a");
+                y = addToggle(y, rightBase, inputX, "opchat.config.strong_hint", ChatBubbleConfig.STRONG_HINT_ENABLED, v -> ChatBubbleConfig.STRONG_HINT_ENABLED = v);
+                y = addToggle(y, rightBase, inputX, "opchat.config.mention_strong_hint", ChatBubbleConfig.MENTION_STRONG_HINT_ENABLED, v -> ChatBubbleConfig.MENTION_STRONG_HINT_ENABLED = v);
+                y = addToggle(y, rightBase, inputX, "opchat.config.anti_spam", ChatBubbleConfig.ANTI_SPAM, v -> ChatBubbleConfig.ANTI_SPAM = v);
+            }
+            case 2 -> {
+                y = addSection(y, rightBase, "\u6d88\u606f\u9884\u89c8");
+                y = addToggle(y, rightBase, inputX, "opchat.config.preview_enabled", ChatBubbleConfig.PREVIEW_ENABLED, v -> ChatBubbleConfig.PREVIEW_ENABLED = v);
+                y = addCycle(y, rightBase, inputX, "opchat.config.preview_lines", String.valueOf(ChatBubbleConfig.PREVIEW_LINES), b -> {
+                    ChatBubbleConfig.PREVIEW_LINES = (ChatBubbleConfig.PREVIEW_LINES % 3) + 1;
+                    b.setMessage(Text.literal(String.valueOf(ChatBubbleConfig.PREVIEW_LINES)));
+                    ChatBubbleConfig.save();
+                });
+                y = addIntInput(y, rightBase, inputX, "opchat.config.preview_width", String.valueOf(ChatBubbleConfig.PREVIEW_WIDTH), 50, 400, v -> ChatBubbleConfig.PREVIEW_WIDTH = v);
+            }
+            case 3 -> {
+                y = addSection(y, rightBase, "\u6c14\u6ce1\u5916\u89c2");
+                y = addHexInput(y, rightBase, inputX, previewX, "opchat.config.own_bubble_color", ChatBubbleConfig.OWN_BUBBLE_COLOR, v -> ChatBubbleConfig.OWN_BUBBLE_COLOR = v);
+                y = addHexInput(y, rightBase, inputX, previewX, "opchat.config.other_bubble_color", ChatBubbleConfig.OTHER_BUBBLE_COLOR, v -> ChatBubbleConfig.OTHER_BUBBLE_COLOR = v);
+                y = addHexInput(y, rightBase, inputX, previewX, "opchat.config.own_text_color", ChatBubbleConfig.OWN_TEXT_COLOR, v -> ChatBubbleConfig.OWN_TEXT_COLOR = v);
+                y = addHexInput(y, rightBase, inputX, previewX, "opchat.config.other_text_color", ChatBubbleConfig.OTHER_TEXT_COLOR, v -> ChatBubbleConfig.OTHER_TEXT_COLOR = v);
+                y = addIntInput(y, rightBase, inputX, "opchat.config.panel_opacity", String.valueOf(ChatBubbleConfig.PANEL_OPACITY), 0, 100, v -> ChatBubbleConfig.PANEL_OPACITY = v);
+            }
+            case 4 -> {
+                y = addSection(y, rightBase, "\u79c1\u804a\u4e0e\u5386\u53f2");
+                y = addIntInput(y, rightBase, inputX, "opchat.config.whisper_history_days", String.valueOf(ChatBubbleConfig.WHISPER_HISTORY_DAYS), 0, 365, v -> ChatBubbleConfig.WHISPER_HISTORY_DAYS = v);
+            }
+            case 5 -> {
+                y = addSection(y, rightBase, "\u5feb\u6377\u6307\u4ee4");
+                y = addToggle(y, rightBase, inputX, "opchat.config.multi_mode_commands", ChatBubbleConfig.MULTI_MODE_COMMANDS, v -> ChatBubbleConfig.MULTI_MODE_COMMANDS = v);
+            }
+            case 6 -> {
+                y = addSection(y, rightBase, "\u517c\u5bb9\u6027");
+                y = addToggle(y, rightBase, inputX, "opchat.config.system_chat_as_bubble", ChatBubbleConfig.SYSTEM_CHAT_AS_BUBBLE, v -> ChatBubbleConfig.SYSTEM_CHAT_AS_BUBBLE = v);
+                y = addToggle(y, rightBase, inputX, "opchat.config.chat_report_compat", ChatBubbleConfig.CHAT_REPORT_COMPAT, v -> ChatBubbleConfig.CHAT_REPORT_COMPAT = v);
+            }
+            case 7 -> {
+                y = addSection(y, rightBase, "\u8054\u7cfb\u4eba\u5206\u7ec4");
+                renderEntries.add(new RenderEntry(y, "opchat.config.contact_groups", 1, null));
+                ButtonWidget manageBtn = ButtonWidget.builder(Text.literal("\u7ba1\u7406\u5206\u7ec4 \u2192"), b ->
+                    client.setScreen(new ContactGroupScreen(this))
+                ).dimensions(inputX, y, INPUT_W, 20).build();
+                rightWidgets.add(manageBtn);
+                addDrawableChild(manageBtn);
+            }
         }
 
         addDrawableChild(ButtonWidget.builder(Text.translatable("gui.done"), btn -> close())
             .dimensions(width / 2 - 100, height - 28, 200, 20).build());
     }
 
-    private int addSection(int y, String title) {
-        renderRows.add(new RenderRow(y + scrollOffset, title, 0, null));
-        return y + SECTION_H;
+    private int addSection(int y, int rightBase, String title) {
+        renderEntries.add(new RenderEntry(y, title, 0, null));
+        return y + 28;
     }
 
-    private int addToggle(int y, String key, boolean value, java.util.function.Consumer<Boolean> setter) {
-        renderRows.add(new RenderRow(y + scrollOffset, key, 1, null));
+    private int addToggle(int y, int rightBase, int inputX, String key, boolean value, Consumer<Boolean> setter) {
+        renderEntries.add(new RenderEntry(y, key, 1, null));
         final boolean[] cur = {value};
         ButtonWidget btn = ButtonWidget.builder(
             Text.literal(cur[0] ? "ON" : "OFF"),
@@ -138,24 +136,24 @@ public class ChatBubbleConfigScreen extends Screen {
                 setter.accept(cur[0]);
                 b.setMessage(Text.literal(cur[0] ? "ON" : "OFF"));
                 ChatBubbleConfig.save();
-            }).dimensions(INPUT_X, y, INPUT_W, 20).build();
-        scrollWidgets.add(addDrawableChild(btn));
-        widgetBaseY.add(y + scrollOffset);
+            }).dimensions(inputX, y, INPUT_W, 20).build();
+        rightWidgets.add(btn);
+        addDrawableChild(btn);
         return y + ROW_H;
     }
 
-    private int addCycle(int y, String key, String current, java.util.function.Consumer<ButtonWidget> onClick) {
-        renderRows.add(new RenderRow(y + scrollOffset, key, 1, null));
+    private int addCycle(int y, int rightBase, int inputX, String key, String current, Consumer<ButtonWidget> onClick) {
+        renderEntries.add(new RenderEntry(y, key, 1, null));
         ButtonWidget btn = ButtonWidget.builder(Text.literal(current), b -> onClick.accept(b))
-            .dimensions(INPUT_X, y, INPUT_W, 20).build();
-        scrollWidgets.add(addDrawableChild(btn));
-        widgetBaseY.add(y + scrollOffset);
+            .dimensions(inputX, y, INPUT_W, 20).build();
+        rightWidgets.add(btn);
+        addDrawableChild(btn);
         return y + ROW_H;
     }
 
-    private int addIntInput(int y, String key, String initial, int min, int max, java.util.function.Consumer<Integer> setter) {
-        renderRows.add(new RenderRow(y + scrollOffset, key, 1, null));
-        TextFieldWidget box = new TextFieldWidget(textRenderer, INPUT_X, y, INPUT_W, 20, Text.literal(""));
+    private int addIntInput(int y, int rightBase, int inputX, String key, String initial, int min, int max, Consumer<Integer> setter) {
+        renderEntries.add(new RenderEntry(y, key, 1, null));
+        TextFieldWidget box = new TextFieldWidget(textRenderer, inputX, y, INPUT_W, 20, Text.literal(""));
         box.setText(initial);
         box.setMaxLength(3);
         box.setChangedListener(s -> {
@@ -168,14 +166,14 @@ public class ChatBubbleConfigScreen extends Screen {
                 }
             } catch (NumberFormatException ignored) {}
         });
-        scrollWidgets.add(addDrawableChild(box));
-        widgetBaseY.add(y + scrollOffset);
+        rightWidgets.add(box);
+        addDrawableChild(box);
         return y + ROW_H;
     }
 
-    private int addHexInput(int y, String key, String initial, java.util.function.Consumer<String> setter) {
-        final TextFieldWidget box = new TextFieldWidget(textRenderer, INPUT_X, y, INPUT_W, 20, Text.literal(""));
-        renderRows.add(new RenderRow(y + scrollOffset, key, 2, box::getText));
+    private int addHexInput(int y, int rightBase, int inputX, int previewX, String key, String initial, Consumer<String> setter) {
+        final TextFieldWidget box = new TextFieldWidget(textRenderer, inputX, y, INPUT_W, 20, Text.literal(""));
+        renderEntries.add(new RenderEntry(y, key, 2, box::getText));
         box.setText(initial);
         box.setMaxLength(7);
         box.setChangedListener(s -> {
@@ -189,8 +187,8 @@ public class ChatBubbleConfigScreen extends Screen {
                 ChatBubbleConfig.save();
             }
         });
-        scrollWidgets.add(addDrawableChild(box));
-        widgetBaseY.add(y + scrollOffset);
+        rightWidgets.add(box);
+        addDrawableChild(box);
         return y + ROW_H;
     }
 
@@ -200,20 +198,35 @@ public class ChatBubbleConfigScreen extends Screen {
         renderDarkening(context);
         context.drawCenteredTextWithShadow(textRenderer, title, width / 2, 14, 0xFFFFFFFF);
 
-        for (var row : renderRows) {
-            int y = row.baseY() - scrollOffset;
-            if (y < -SECTION_H || y > height) continue;
-            if (row.kind() == 0) {
-                context.drawTextWithShadow(textRenderer, Text.literal(row.text()), LABEL_X, y, 0xFFFFAA00);
-                context.fill(LABEL_X, y + 11, width - LABEL_X, y + 12, 0x44FFAA00);
-            } else if (row.kind() == 1) {
-                context.drawTextWithShadow(textRenderer, Text.translatable(row.text()), LABEL_X, y + 6, 0xFFAAAAAA);
-            } else if (row.kind() == 2) {
-                context.drawTextWithShadow(textRenderer, Text.translatable(row.text()), LABEL_X, y + 6, 0xFFAAAAAA);
-                String colorStr = row.colorSupplier() != null ? row.colorSupplier().get() : "";
+        context.fill(0, 0, LEFT_W, height, 0x80000000);
+        context.fill(LEFT_W, 0, LEFT_W + 1, height, 0xFF333333);
+
+        int catY = START_Y + selectedCategory * LEFT_ITEM_H;
+        context.fill(0, catY - 1, LEFT_W, catY + LEFT_ITEM_H - 1, 0xFF2A4A7A);
+
+        for (int i = 0; i < CATEGORIES.length; i++) {
+            int itemY = START_Y + i * LEFT_ITEM_H;
+            int textColor = (i == selectedCategory) ? 0xFFFFFFFF : 0xFFAAAAAA;
+            context.drawTextWithShadow(textRenderer, Text.literal(CATEGORIES[i]), 8,
+                itemY + (LEFT_ITEM_H - textRenderer.fontHeight) / 2, textColor);
+        }
+
+        int rightBase = LEFT_W + LABEL_X_OFFSET;
+        for (var entry : renderEntries) {
+            int ey = entry.y();
+            if (ey < 0 || ey > height) continue;
+            if (entry.kind() == 0) {
+                context.drawTextWithShadow(textRenderer, Text.literal(entry.text()), rightBase, ey, 0xFFFFAA00);
+                context.fill(rightBase, ey + 12, width - 20, ey + 13, 0x44FFAA00);
+            } else if (entry.kind() == 1) {
+                context.drawTextWithShadow(textRenderer, Text.translatable(entry.text()), rightBase, ey + 6, 0xFFAAAAAA);
+            } else if (entry.kind() == 2) {
+                context.drawTextWithShadow(textRenderer, Text.translatable(entry.text()), rightBase, ey + 6, 0xFFAAAAAA);
+                int previewX = LEFT_W + PREVIEW_X_OFFSET;
+                String colorStr = entry.colorSupplier() != null ? entry.colorSupplier().get() : "";
                 int color = ChatBubbleConfig.parseHexColor(colorStr, 0xFF000000);
-                context.fill(PREVIEW_X, y + 3, PREVIEW_X + 14, y + 17, 0xFF444444);
-                context.fill(PREVIEW_X + 1, y + 4, PREVIEW_X + 13, y + 16, color);
+                context.fill(previewX, ey + 3, previewX + 14, ey + 17, 0xFF444444);
+                context.fill(previewX + 1, ey + 4, previewX + 13, ey + 16, color);
             }
         }
 
@@ -224,27 +237,6 @@ public class ChatBubbleConfigScreen extends Screen {
     public void close() {
         ChatBubbleConfig.save();
         client.setScreen(lastScreen);
-    }
-
-    private int calcMaxScroll() {
-        int sections = 7;
-        int items = 17 + ChatBubbleConfig.CONTACT_GROUPS.size() + 1;
-        int total = START_Y + sections * SECTION_H + items * ROW_H + 20;
-        return Math.max(0, total - (height - 40));
-    }
-
-    @Override
-    public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
-        int maxScroll = calcMaxScroll();
-        if (maxScroll <= 0) return false;
-        scrollOffset -= (int) (verticalAmount * 20);
-        scrollOffset = MathHelper.clamp(scrollOffset, 0, maxScroll);
-        for (int i = 0; i < scrollWidgets.size() && i < widgetBaseY.size(); i++) {
-            if (scrollWidgets.get(i) instanceof net.minecraft.client.gui.widget.ClickableWidget cw) {
-                cw.setY(widgetBaseY.get(i) - scrollOffset);
-            }
-        }
-        return true;
     }
 
     @Override

@@ -19,6 +19,7 @@ import net.minecraft.text.Style;
 import net.minecraft.text.Text;
 import net.minecraft.util.Identifier;
 import net.minecraft.util.math.MathHelper;
+import net.minecraft.world.GameMode;
 import com.opchat.packets.QuoteSyncPacket;
 
 import java.io.InputStream;
@@ -132,6 +133,8 @@ public class ChatBubbleScreen extends Screen {
     private int quickCmdEditIndex = -1;
     private TextFieldWidget quickCmdDisplayField;
     private TextFieldWidget quickCmdCommandField;
+    private TextFieldWidget proxyCmdField; // invisible proxy for ChatInputSuggestor (handles @* → @a)
+    private boolean syncingProxy = false;
     private ChatInputSuggestor quickCmdSuggestor;
     private static final int QUICK_CMD_PANEL_W = 200;
     private static final int QUICK_CMD_ITEM_H = 18;
@@ -230,14 +233,40 @@ public class ChatBubbleScreen extends Screen {
         quickCmdCommandField.setDrawsBackground(false);
         quickCmdCommandField.setVisible(false);
         quickCmdCommandField.setChangedListener(text -> {
+            if (syncingProxy) return;
             if (quickCmdSuggestor != null) {
+                String proxyText = text.replace("@*", "aa");
+                int cursor = quickCmdCommandField.getCursor();
+                syncingProxy = true;
+                proxyCmdField.setText(proxyText);
+                proxyCmdField.setCursor(cursor, false);
+                syncingProxy = false;
                 quickCmdSuggestor.setWindowActive(text.startsWith("/"));
                 quickCmdSuggestor.refresh();
             }
         });
         addDrawableChild(quickCmdCommandField);
 
-        quickCmdSuggestor = new ChatInputSuggestor(client, this, quickCmdCommandField, textRenderer,
+        // Invisible proxy field: ChatInputSuggestor reads from this (with @* → aa),
+        // user edits quickCmdCommandField (with @* preserved).
+        proxyCmdField = new TextFieldWidget(textRenderer, 0, 0, 0, 16, Text.literal(""));
+        proxyCmdField.setMaxLength(256);
+        proxyCmdField.setVisible(false);
+        proxyCmdField.setChangedListener(text -> {
+            if (syncingProxy) return;
+            String cmdText = text.replace("aa", "@*");
+            int cursor = proxyCmdField.getCursor();
+            syncingProxy = true;
+            quickCmdCommandField.setText(cmdText);
+            quickCmdCommandField.setCursor(cursor, false);
+            syncingProxy = false;
+            if (quickCmdSuggestor != null) {
+                quickCmdSuggestor.setWindowActive(cmdText.startsWith("/"));
+                quickCmdSuggestor.refresh();
+            }
+        });
+
+        quickCmdSuggestor = new ChatInputSuggestor(client, this, proxyCmdField, textRenderer,
             false, false, 0, 8, true, 0xDD1E1E1E);
 
         if (!iconsLoaded) {
@@ -512,16 +541,16 @@ public class ChatBubbleScreen extends Screen {
             // Check submenu first (quick commands)
             if (avatarSubMenuVisible) {
                 int subX = avatarMenuX + AVATAR_MENU_W;
-                int subItems = ChatBubbleConfig.QUICK_COMMANDS.size();
+                int subItems = getActiveQuickCommandList().size();
                 int subH = CTX_ITEM_H * Math.max(subItems, 1);
                 if (mouseX >= subX && mouseX <= subX + AVATAR_SUB_W
                     && mouseY >= avatarMenuY + CTX_ITEM_H && mouseY <= avatarMenuY + CTX_ITEM_H + subH) {
                     int item = (int) ((mouseY - (avatarMenuY + CTX_ITEM_H)) / CTX_ITEM_H);
-                    if (item >= 0 && item < ChatBubbleConfig.QUICK_COMMANDS.size()) {
+                    if (item >= 0 && item < getActiveQuickCommandList().size()) {
                         String player = avatarMenuPlayer;
                         avatarMenuPlayer = null;
                         avatarSubMenuVisible = false;
-                        executeQuickCommandForPlayer(ChatBubbleConfig.QUICK_COMMANDS.get(item), player);
+                        executeQuickCommandForPlayer(getActiveQuickCommandList().get(item), player);
                     }
                     return true;
                 }
@@ -959,10 +988,20 @@ public class ChatBubbleScreen extends Screen {
                     context.fill(sx, iy, sx + sw, iy + SIDEBAR_ITEM_H, selected ? 0xFF2A4A7A : 0xFF333333);
                 boolean pinned = WhisperHistory.isPinned(name);
                 int indent = isBot ? 8 : 0;
-                int textMaxW = sw - (pinned ? 16 : 10) - indent;
+                int avatarSize = SIDEBAR_ITEM_H - 4;
+                int avatarX = sx + 2 + indent;
+                int avatarY = iy + (SIDEBAR_ITEM_H - avatarSize) / 2;
+                UUID uuid = getUuidForName(name);
+                if (uuid != null) {
+                    renderPlayerSkin(context, uuid, avatarX, avatarY, avatarSize);
+                } else {
+                    context.fill(avatarX, avatarY, avatarX + avatarSize, avatarY + avatarSize, 0xFF333333);
+                }
+                int textX = avatarX + avatarSize + 3;
+                int textMaxW = sx + sw - textX - (pinned ? 12 : 4);
                 String display = textRenderer.trimToWidth(WhisperHistory.getDisplayName(name), textMaxW);
                 int color = selected ? 0xFFFFFFFF : (hidden ? 0xFF666666 : (offline ? 0xFF777777 : (hover ? 0xFFFFFFFF : (pinned ? 0xFFFFD700 : (isBot ? 0xFFAAAAAA : 0xFFCCCCCC)))));
-                context.drawText(textRenderer, Text.literal(display), sx + 4 + indent,
+                context.drawText(textRenderer, Text.literal(display), textX,
                     iy + (SIDEBAR_ITEM_H - textRenderer.fontHeight) / 2, color, false);
                 if (pinned) {
                     context.drawText(textRenderer, Text.literal("*"),
@@ -1361,8 +1400,13 @@ public class ChatBubbleScreen extends Screen {
     }
 
     private static final java.util.Map<UUID, Identifier> skinCache = new java.util.HashMap<>();
+    private static final java.util.Map<String, UUID> nameToUuidCache = new java.util.HashMap<>();
 
     private void renderPlayerSkin(DrawContext context, UUID uuid, int x, int y) {
+        renderPlayerSkin(context, uuid, x, y, AVATAR);
+    }
+
+    private void renderPlayerSkin(DrawContext context, UUID uuid, int x, int y, int size) {
         Identifier skin = null;
         if (client.getNetworkHandler() != null) {
             var entry = client.getNetworkHandler().getPlayerListEntry(uuid);
@@ -1373,8 +1417,27 @@ public class ChatBubbleScreen extends Screen {
         }
         if (skin == null) skin = skinCache.get(uuid);
         if (skin == null) skin = Identifier.of("textures/entity/player/slim/steve.png");
-        context.drawTexture(RenderPipelines.GUI_TEXTURED, skin, x, y, 8.0f, 8.0f, AVATAR, AVATAR, 8, 8, 64, 64);
-        context.drawTexture(RenderPipelines.GUI_TEXTURED, skin, x, y, 40.0f, 8.0f, AVATAR, AVATAR, 8, 8, 64, 64);
+        context.drawTexture(RenderPipelines.GUI_TEXTURED, skin, x, y, 8.0f, 8.0f, size, size, 8, 8, 64, 64);
+        context.drawTexture(RenderPipelines.GUI_TEXTURED, skin, x, y, 40.0f, 8.0f, size, size, 8, 8, 64, 64);
+    }
+
+    private UUID getUuidForName(String name) {
+        if (name == null || name.isEmpty()) return null;
+        UUID cached = nameToUuidCache.get(name);
+        if (cached != null) return cached;
+        if (client.getNetworkHandler() != null) {
+            for (var entry : client.getNetworkHandler().getPlayerList()) {
+                String n = entry.getProfile().name();
+                if (name.equals(n)) {
+                    UUID id = entry.getProfile().id();
+                    if (id != null) {
+                        nameToUuidCache.put(name, id);
+                        return id;
+                    }
+                }
+            }
+        }
+        return null;
     }
 
     private void renderLineWithClicks(DrawContext context, OrderedText line,
@@ -1596,7 +1659,7 @@ public class ChatBubbleScreen extends Screen {
         if (avatarSubMenuVisible) {
             int subX = mx + AVATAR_MENU_W;
             int subY = my + CTX_ITEM_H;
-            int subItems = Math.max(ChatBubbleConfig.QUICK_COMMANDS.size(), 1);
+            int subItems = Math.max(getActiveQuickCommandList().size(), 1);
             int subH = CTX_ITEM_H * subItems;
             context.fill(subX, subY, subX + AVATAR_SUB_W, subY + subH, 0xEE2A2A2A);
             context.fill(subX, subY, subX + AVATAR_SUB_W, subY + 1, COLOR_DIVIDER);
@@ -1604,15 +1667,15 @@ public class ChatBubbleScreen extends Screen {
             context.fill(subX, subY, subX + 1, subY + subH, COLOR_DIVIDER);
             context.fill(subX + AVATAR_SUB_W - 1, subY, subX + AVATAR_SUB_W, subY + subH, COLOR_DIVIDER);
 
-            if (ChatBubbleConfig.QUICK_COMMANDS.isEmpty()) {
+            if (getActiveQuickCommandList().isEmpty()) {
                 context.drawText(textRenderer, Text.literal("(\u65e0\u5feb\u6377\u6307\u4ee4)"), subX + 8, subY + 5, 0xFF888888, false);
             } else {
-                for (int i = 0; i < ChatBubbleConfig.QUICK_COMMANDS.size(); i++) {
+                for (int i = 0; i < getActiveQuickCommandList().size(); i++) {
                     int iy = subY + i * CTX_ITEM_H;
                     boolean hover = mouseX >= subX && mouseX <= subX + AVATAR_SUB_W
                         && mouseY >= iy && mouseY <= iy + CTX_ITEM_H;
                     context.fill(subX + 1, iy + (i > 0 ? 1 : 0), subX + AVATAR_SUB_W - 1, iy + CTX_ITEM_H, hover ? 0xFF4A4A4A : 0xFF3A3A3A);
-                    String display = ChatBubbleConfig.QUICK_COMMANDS.get(i).getDisplay();
+                    String display = getActiveQuickCommandList().get(i).getDisplay();
                     String shown = textRenderer.trimToWidth(display, AVATAR_SUB_W - 12);
                     if (!shown.equals(display)) shown = textRenderer.trimToWidth(display, AVATAR_SUB_W - 18) + "...";
                     context.drawText(textRenderer, Text.literal(shown), subX + 8, iy + 5, 0xFFEEEEEE, false);
@@ -1933,10 +1996,26 @@ public class ChatBubbleScreen extends Screen {
 
     // ===== 快捷指令 (/) =====
 
+    private String getCurrentModeKey() {
+        if (client.interactionManager == null) return null;
+        GameMode mode = client.interactionManager.getCurrentGameMode();
+        return switch (mode) {
+            case CREATIVE -> "creative";
+            case SURVIVAL -> "survival";
+            case SPECTATOR -> "spectator";
+            case ADVENTURE -> "adventure";
+            default -> null;
+        };
+    }
+
+    private List<ChatBubbleConfig.QuickCommand> getActiveQuickCommandList() {
+        return ChatBubbleConfig.getActiveQuickCommands(getCurrentModeKey());
+    }
+
     private int[] getQuickCmdPanelBounds() {
         int w = QUICK_CMD_PANEL_W;
         int headerH = 22;
-        int listH = Math.max(0, ChatBubbleConfig.QUICK_COMMANDS.size()) * QUICK_CMD_ITEM_H;
+        int listH = Math.max(0, getActiveQuickCommandList().size()) * QUICK_CMD_ITEM_H;
         int footerH = 6;
         int h = headerH + listH + footerH;
         if (quickCmdEditing) h += QUICK_CMD_FORM_H;
@@ -1959,7 +2038,21 @@ public class ChatBubbleScreen extends Screen {
         context.fill(px + pw - 1, py, px + pw, py + ph, COLOR_DIVIDER);
 
         int headerY = py + 4;
-        context.drawText(textRenderer, Text.literal("\u5feb\u6377\u6307\u4ee4"), px + 8, headerY + 2, 0xFFFFAA00, false);
+        String headerText = "\u5feb\u6377\u6307\u4ee4";
+        if (ChatBubbleConfig.MULTI_MODE_COMMANDS) {
+            String modeKey = getCurrentModeKey();
+            if (modeKey != null) {
+                String modeName = switch (modeKey) {
+                    case "creative" -> "\u521b\u9020";
+                    case "survival" -> "\u751f\u5b58";
+                    case "spectator" -> "\u65c1\u89c2";
+                    case "adventure" -> "\u5192\u9669";
+                    default -> "\u5171\u7528";
+                };
+                headerText += " [" + modeName + "]";
+            }
+        }
+        context.drawText(textRenderer, Text.literal(headerText), px + 8, headerY + 2, 0xFFFFAA00, false);
 
         int addX = px + pw - 32 - 4;
         int addY = headerY;
@@ -1971,8 +2064,8 @@ public class ChatBubbleScreen extends Screen {
         context.drawCenteredTextWithShadow(textRenderer, Text.literal(addLabel), addX + addW / 2, addY + 4, 0xFFFFFFFF);
 
         int listY = headerY + 22;
-        for (int i = 0; i < ChatBubbleConfig.QUICK_COMMANDS.size(); i++) {
-            var cmd = ChatBubbleConfig.QUICK_COMMANDS.get(i);
+        for (int i = 0; i < getActiveQuickCommandList().size(); i++) {
+            var cmd = getActiveQuickCommandList().get(i);
             int itemX = px + 4;
             int itemY = listY + i * QUICK_CMD_ITEM_H;
             int itemW = pw - 8;
@@ -2001,7 +2094,7 @@ public class ChatBubbleScreen extends Screen {
         }
 
         if (quickCmdEditing) {
-            int formY = listY + ChatBubbleConfig.QUICK_COMMANDS.size() * QUICK_CMD_ITEM_H + 4;
+            int formY = listY + getActiveQuickCommandList().size() * QUICK_CMD_ITEM_H + 4;
             renderQuickCmdForm(context, mouseX, mouseY, px, formY, pw);
         }
     }
@@ -2037,6 +2130,10 @@ public class ChatBubbleScreen extends Screen {
         quickCmdCommandField.setWidth(cmdFieldW);
         quickCmdCommandField.setHeight(cmdFieldH);
         quickCmdCommandField.setVisible(true);
+        proxyCmdField.setX(cmdFieldX);
+        proxyCmdField.setY(cmdFieldY);
+        proxyCmdField.setWidth(cmdFieldW);
+        proxyCmdField.setHeight(cmdFieldH);
 
         int varBtnX = cmdFieldX + cmdFieldW + 4;
         boolean hoverVar = mouseX >= varBtnX && mouseX <= varBtnX + varBtnW && mouseY >= cmdFieldY && mouseY <= cmdFieldY + cmdFieldH;
@@ -2088,7 +2185,7 @@ public class ChatBubbleScreen extends Screen {
         }
 
         int listY = headerY + 22;
-        for (int i = 0; i < ChatBubbleConfig.QUICK_COMMANDS.size(); i++) {
+        for (int i = 0; i < getActiveQuickCommandList().size(); i++) {
             int itemX = px + 4;
             int itemY = listY + i * QUICK_CMD_ITEM_H;
             int itemW = pw - 8;
@@ -2099,13 +2196,13 @@ public class ChatBubbleScreen extends Screen {
             int delW = 12;
 
             if (mx >= delX && mx <= delX + delW && my >= itemY && my <= itemY + QUICK_CMD_ITEM_H - 2) {
-                ChatBubbleConfig.QUICK_COMMANDS.remove(i);
+                getActiveQuickCommandList().remove(i);
                 ChatBubbleConfig.save();
                 return;
             }
 
             if (mx >= editX && mx <= editX + editW && my >= itemY && my <= itemY + QUICK_CMD_ITEM_H - 2) {
-                var cmd = ChatBubbleConfig.QUICK_COMMANDS.get(i);
+                var cmd = getActiveQuickCommandList().get(i);
                 quickCmdEditing = true;
                 quickCmdEditIndex = i;
                 quickCmdDisplayField.setText(cmd.display);
@@ -2118,13 +2215,13 @@ public class ChatBubbleScreen extends Screen {
             }
 
             if (mx >= itemX && mx <= itemX + textW && my >= itemY && my <= itemY + QUICK_CMD_ITEM_H - 2) {
-                executeQuickCommand(ChatBubbleConfig.QUICK_COMMANDS.get(i));
+                executeQuickCommand(getActiveQuickCommandList().get(i));
                 return;
             }
         }
 
         if (quickCmdEditing) {
-            int formY = listY + ChatBubbleConfig.QUICK_COMMANDS.size() * QUICK_CMD_ITEM_H + 4;
+            int formY = listY + getActiveQuickCommandList().size() * QUICK_CMD_ITEM_H + 4;
             handleQuickCmdFormClick(mx, my, px, formY, pw);
             return;
         }
@@ -2210,12 +2307,12 @@ public class ChatBubbleScreen extends Screen {
             return;
         }
 
-        if (quickCmdEditIndex >= 0 && quickCmdEditIndex < ChatBubbleConfig.QUICK_COMMANDS.size()) {
-            var cmd = ChatBubbleConfig.QUICK_COMMANDS.get(quickCmdEditIndex);
+        if (quickCmdEditIndex >= 0 && quickCmdEditIndex < getActiveQuickCommandList().size()) {
+            var cmd = getActiveQuickCommandList().get(quickCmdEditIndex);
             cmd.display = display;
             cmd.command = command;
         } else {
-            ChatBubbleConfig.QUICK_COMMANDS.add(new ChatBubbleConfig.QuickCommand(display, command));
+            ChatBubbleConfig.getOrCreateModeCommands(getCurrentModeKey()).add(new ChatBubbleConfig.QuickCommand(display, command));
         }
         ChatBubbleConfig.save();
 
