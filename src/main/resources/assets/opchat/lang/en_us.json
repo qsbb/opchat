@@ -19,6 +19,7 @@
   "opchat.config.preview_width": "Preview Width",
   "opchat.config.panel_opacity": "Panel Opacity (0-100)",
   "opchat.config.whisper_history_days": "Whisper History Days (0=never)",
+  "opchat.config.send_history_preview": "Send History Preview",
   "opchat.config.multi_mode_commands": "Multi-mode Quick Commands",
   "opchat.config.contact_groups": "Contact Groups",
   "opchat.config.bot_prefixes": "Bot Prefixes (comma-separated)",

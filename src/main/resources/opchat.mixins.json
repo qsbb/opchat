@@ -6,7 +6,8 @@
   "refmap": "opchat.refmap.json",
   "client": [
     "ChatComponentMixin",
-    "ChatListenerMixin"
+    "ChatListenerMixin",
+    "ChatScreenAccessor"
   ],
   "injectors": {
     "defaultRequire": 1

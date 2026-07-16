@@ -19,6 +19,7 @@
   "opchat.config.preview_width": "预览宽度",
   "opchat.config.panel_opacity": "面板透明度 (0-100)",
   "opchat.config.whisper_history_days": "私聊记录保留天数 (0=永不)",
+  "opchat.config.send_history_preview": "历史发送记录预览",
   "opchat.config.multi_mode_commands": "多模式快捷指令",
   "opchat.config.contact_groups": "联系人分组",
   "opchat.config.bot_prefixes": "假人前缀 (逗号分隔)",

@@ -1,5 +1,6 @@
 package com.opchat;
 
+import com.opchat.mixin.ChatScreenAccessor;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.rendering.v1.HudRenderCallback;
@@ -19,14 +20,9 @@ public class ChatBubbleModClient implements ClientModInitializer {
         ScreenEvents.AFTER_INIT.register((client, screen, scaledWidth, scaledHeight) -> {
             if (!ChatBubbleConfig.ENABLED) return;
             if (screen instanceof ChatScreen chatScreen) {
-                String initialText = "";
-                try {
-                    var field = ChatScreen.class.getDeclaredField("originalChatText");
-                    field.setAccessible(true);
-                    initialText = (String) field.get(chatScreen);
-                } catch (Exception e) {
-                    // fallback: empty
-                }
+                ChatScreenAccessor accessor = (ChatScreenAccessor) chatScreen;
+                String initialText = accessor.opchat$getOriginalChatText();
+                accessor.opchat$getChatField().setText("");
                 client.setScreen(new ChatBubbleScreen(initialText != null ? initialText : ""));
             }
         });

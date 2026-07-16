@@ -96,6 +96,7 @@ public class ChatBubbleConfigScreen extends Screen {
             case 4 -> {
                 y = addSection(y, rightBase, "\u79c1\u804a\u4e0e\u5386\u53f2");
                 y = addIntInput(y, rightBase, inputX, "opchat.config.whisper_history_days", String.valueOf(ChatBubbleConfig.WHISPER_HISTORY_DAYS), 0, 365, v -> ChatBubbleConfig.WHISPER_HISTORY_DAYS = v);
+                y = addToggle(y, rightBase, inputX, "opchat.config.send_history_preview", ChatBubbleConfig.SEND_HISTORY_PREVIEW, v -> ChatBubbleConfig.SEND_HISTORY_PREVIEW = v);
             }
             case 5 -> {
                 y = addSection(y, rightBase, "\u5feb\u6377\u6307\u4ee4");

@@ -75,6 +75,8 @@ public class ChatBubbleScreen extends Screen {
     private boolean scrollToBottom = true;
     private String historyBuffer = "";
     private int historyPos = -1;
+    private boolean suppressHistoryReset = false;
+    private boolean historyListVisible = false;
     private String worldName;
     private boolean editingTitle;
     private TextFieldWidget titleEditor;
@@ -335,6 +337,10 @@ public class ChatBubbleScreen extends Screen {
             commandSuggestions.setWindowActive(text.startsWith("/"));
             commandSuggestions.refresh();
         }
+        if (!suppressHistoryReset) {
+            historyPos = client.inGameHud.getChatHud().getMessageHistory().size();
+            historyListVisible = false;
+        }
     }
 
     @Override
@@ -420,6 +426,22 @@ public class ChatBubbleScreen extends Screen {
         if (keyCode == 265) { moveInHistory(-1); return true; }
         if (keyCode == 264) { moveInHistory(1); return true; }
         return super.keyPressed(keyInput);
+    }
+
+    @Override
+    public boolean charTyped(net.minecraft.client.input.CharInput charInput) {
+        if (charInput.codepoint() == '/' && selectedContact == null && !input.getText().startsWith("/")) {
+            input.setText("/" + input.getText());
+            input.setCursorToEnd(false);
+            if (commandSuggestions != null) {
+                commandSuggestions.setWindowActive(true);
+                commandSuggestions.refresh();
+            }
+            input.setFocused(true);
+            setFocused(input);
+            return true;
+        }
+        return super.charTyped(charInput);
     }
 
     @Override
@@ -838,6 +860,7 @@ public class ChatBubbleScreen extends Screen {
         if (editingNickname) renderNicknameEditor(context, mouseX, mouseY);
         renderToast(context);
         renderBottomBar(context, mouseX, mouseY);
+        if (historyListVisible && ChatBubbleConfig.SEND_HISTORY_PREVIEW) renderHistoryList(context, mouseX, mouseY);
         if (quickPanelOpen) renderQuickPanel(context, mouseX, mouseY);
         if (quickCmdPanelOpen) renderQuickCmdPanel(context, mouseX, mouseY);
 
@@ -1788,6 +1811,49 @@ public class ChatBubbleScreen extends Screen {
         drawTextureIcon(context, TEX_SEND, sendX, iconY, ICON_S);
     }
 
+    private void renderHistoryList(DrawContext context, int mouseX, int mouseY) {
+        var history = client.inGameHud.getChatHud().getMessageHistory();
+        int size = history.size();
+        if (size == 0) return;
+
+        int listX = panelX + PAD;
+        int listW = panelW - 2 * PAD;
+        int itemH = 14;
+        int maxItems = 8;
+
+        int startIdx = Math.max(0, historyPos - 3);
+        int endIdx = Math.min(size, startIdx + maxItems);
+        startIdx = Math.max(0, endIdx - maxItems);
+        int count = endIdx - startIdx;
+        if (count <= 0) return;
+
+        int listH = count * itemH + 6;
+        int listBottom = barTop;
+        int listTop = listBottom - listH;
+
+        context.fill(listX, listTop, listX + listW, listBottom, 0xEE1A1A1A);
+        context.fill(listX, listTop, listX + listW, listTop + 1, COLOR_DIVIDER);
+        context.fill(listX, listBottom - 1, listX + listW, listBottom, COLOR_DIVIDER);
+        context.fill(listX, listTop, listX + 1, listBottom, COLOR_DIVIDER);
+        context.fill(listX + listW - 1, listTop, listX + listW, listBottom, COLOR_DIVIDER);
+
+        for (int i = 0; i < count; i++) {
+            int idx = startIdx + i;
+            int entryY = listTop + 3 + i * itemH;
+            boolean isCurrent = (idx == historyPos);
+
+            if (isCurrent) {
+                context.fill(listX + 2, entryY - 1, listX + listW - 2, entryY + itemH - 2, 0xFF3A5A8A);
+            }
+
+            String text = history.get(idx);
+            String trimmed = textRenderer.trimToWidth(text, listW - 14);
+            if (!trimmed.equals(text)) trimmed = textRenderer.trimToWidth(text, listW - 20) + "...";
+            int color = isCurrent ? 0xFFFFFFFF : 0xFFAAAAAA;
+            context.drawText(textRenderer, Text.literal(trimmed), listX + 6, entryY, color, false);
+        }
+    }
+
     private void loadIconTextures() {
         loadIconTexture(TEX_GEAR, "assets/opchat/textures/gui/settings.png");
         loadIconTexture(TEX_SEND, "assets/opchat/textures/gui/send.png");
@@ -2314,6 +2380,14 @@ public class ChatBubbleScreen extends Screen {
             quickCmdEditing = false;
             quickCmdDisplayField.setVisible(false);
             quickCmdCommandField.setVisible(false);
+            if (selectedContact == null && !input.getText().startsWith("/")) {
+                input.setText("/");
+                input.setCursorToEnd(false);
+                if (commandSuggestions != null) {
+                    commandSuggestions.setWindowActive(true);
+                    commandSuggestions.refresh();
+                }
+            }
             input.setFocused(true);
             setFocused(input);
         }
@@ -2492,12 +2566,17 @@ public class ChatBubbleScreen extends Screen {
         if (newPos != historyPos) {
             if (newPos == size) {
                 historyPos = size;
+                suppressHistoryReset = true;
                 input.setText(historyBuffer);
+                suppressHistoryReset = false;
             } else {
                 if (historyPos == size) historyBuffer = input.getText();
+                suppressHistoryReset = true;
                 input.setText(history.get(newPos));
+                suppressHistoryReset = false;
                 historyPos = newPos;
             }
+            historyListVisible = true;
         }
     }
 

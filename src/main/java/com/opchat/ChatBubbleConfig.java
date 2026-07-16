@@ -34,6 +34,7 @@ public class ChatBubbleConfig {
     public static boolean PREVIEW_ENABLED = true;
     public static int PREVIEW_LINES = 2;
     public static int PREVIEW_WIDTH = 150;
+    public static boolean SEND_HISTORY_PREVIEW = true;
     public static String OWN_BUBBLE_COLOR = "#95EC69";
     public static String OTHER_BUBBLE_COLOR = "#4A4A4A";
     public static String OWN_TEXT_COLOR = "#0A0A0A";
@@ -196,6 +197,7 @@ public class ChatBubbleConfig {
         PREVIEW_ENABLED = data.preview_enabled;
         PREVIEW_LINES = data.preview_lines;
         PREVIEW_WIDTH = data.preview_width;
+        SEND_HISTORY_PREVIEW = data.send_history_preview;
         OWN_BUBBLE_COLOR = data.own_bubble_color;
         OTHER_BUBBLE_COLOR = data.other_bubble_color;
         OWN_TEXT_COLOR = data.own_text_color;
@@ -221,6 +223,7 @@ public class ChatBubbleConfig {
         data.preview_enabled = PREVIEW_ENABLED;
         data.preview_lines = PREVIEW_LINES;
         data.preview_width = PREVIEW_WIDTH;
+        data.send_history_preview = SEND_HISTORY_PREVIEW;
         data.own_bubble_color = OWN_BUBBLE_COLOR;
         data.other_bubble_color = OTHER_BUBBLE_COLOR;
         data.own_text_color = OWN_TEXT_COLOR;
@@ -267,6 +270,7 @@ public class ChatBubbleConfig {
         boolean preview_enabled = true;
         int preview_lines = 2;
         int preview_width = 150;
+        boolean send_history_preview = true;
         String own_bubble_color = "#95EC69";
         String other_bubble_color = "#4A4A4A";
         String own_text_color = "#0A0A0A";
