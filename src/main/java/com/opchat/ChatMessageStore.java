@@ -35,6 +35,8 @@ public class ChatMessageStore {
     private static final Map<String, String> worldTitles = new HashMap<>();
     private static final Gson GSON = new Gson();
     private static boolean titlesLoaded;
+    private static final Map<String, List<PersistedMessage>> savedHistories = new HashMap<>();
+    private static boolean historiesLoaded;
     private static final Map<String, PendingMeta> pendingMetas = new HashMap<>();
 
     public record SenderMeta(UUID senderUUID, Text senderName,
@@ -155,6 +157,19 @@ public class ChatMessageStore {
         int duplicateCount
     ) {}
 
+    private record PersistedMessage(
+        String senderUUID,
+        String senderName,
+        String content,
+        String time,
+        boolean isOwn,
+        boolean isSystem,
+        String replyContent,
+        String replySender,
+        String messageHash,
+        int duplicateCount
+    ) {}
+
     public static class PreviewEntry {
         public final String text;
         public int ticks;
@@ -187,6 +202,7 @@ public class ChatMessageStore {
                     last.replyContent(), last.replySender(), last.messageHash(),
                     last.duplicateCount() + 1
                 ));
+                saveCurrentHistory();
                 return;
             }
         }
@@ -220,6 +236,7 @@ public class ChatMessageStore {
 
         while (messages.size() > MAX)
             messages.remove(0);
+        saveCurrentHistory();
 
         if (!screenOpen) {
             unreadCount++;
@@ -363,11 +380,94 @@ public class ChatMessageStore {
         boolean isSpecific = name != null && (name.startsWith("SP:") || name.startsWith("MP:"));
         boolean isRefinement = wasFallback && isSpecific;
         boolean hasPendingMessages = currentWorldKey == null && isSpecific && !messages.isEmpty();
+        saveCurrentHistory();
         currentWorldKey = name;
-        if (isRefinement || hasPendingMessages) return;
+        if (isRefinement || hasPendingMessages) {
+            loadCurrentHistory();
+            saveCurrentHistory();
+            return;
+        }
         messages.clear();
         unreadCount = 0;
         previews.clear();
+        loadCurrentHistory();
+    }
+
+    public static void setHistorySavingEnabled(boolean enabled) {
+        if (enabled) {
+            loadCurrentHistory();
+            saveCurrentHistory();
+        }
+    }
+
+    private static Path getHistoryFile() {
+        return MinecraftClient.getInstance().runDirectory.toPath().resolve("opchat/chat_history.json");
+    }
+
+    private static void loadHistories() {
+        if (historiesLoaded) return;
+        historiesLoaded = true;
+        Path file = getHistoryFile();
+        if (!Files.exists(file)) return;
+        try (Reader reader = Files.newBufferedReader(file, StandardCharsets.UTF_8)) {
+            Map<String, List<PersistedMessage>> data = GSON.fromJson(reader,
+                new TypeToken<Map<String, List<PersistedMessage>>>(){}.getType());
+            if (data != null) savedHistories.putAll(data);
+        } catch (Exception ignored) {}
+    }
+
+    private static void loadCurrentHistory() {
+        if (!ChatBubbleConfig.CHAT_HISTORY_SAVE || currentWorldKey == null || "world".equals(currentWorldKey)) return;
+        loadHistories();
+        List<PersistedMessage> saved = savedHistories.get(currentWorldKey);
+        if (saved == null || saved.isEmpty()) return;
+        List<ChatMessage> currentSession = new ArrayList<>(messages);
+        Set<String> existing = new HashSet<>();
+        for (ChatMessage message : currentSession) {
+            existing.add(message.time() + "\u0000" + message.senderName().getString() + "\u0000" + message.content().getString());
+        }
+        messages.clear();
+        for (PersistedMessage item : saved) {
+            try {
+                String identity = item.time() + "\u0000" + item.senderName() + "\u0000" + item.content();
+                if (existing.contains(identity)) continue;
+                messages.add(new ChatMessage(
+                    UUID.fromString(item.senderUUID()),
+                    Text.literal(item.senderName()),
+                    Text.literal(item.content()),
+                    LocalTime.parse(item.time()),
+                    item.isOwn(), item.isSystem(),
+                    item.replyContent(), item.replySender(), item.messageHash(),
+                    Math.max(1, item.duplicateCount())
+                ));
+            } catch (Exception ignored) {}
+        }
+        messages.addAll(currentSession);
+        while (messages.size() > MAX) messages.remove(0);
+    }
+
+    private static void saveCurrentHistory() {
+        if (!ChatBubbleConfig.CHAT_HISTORY_SAVE || currentWorldKey == null || "world".equals(currentWorldKey)) return;
+        loadHistories();
+        List<PersistedMessage> data = new ArrayList<>();
+        for (ChatMessage message : messages) {
+            data.add(new PersistedMessage(
+                message.senderUUID().toString(), message.senderName().getString(),
+                message.content().getString(), message.time().toString(),
+                message.isOwn(), message.isSystem(), message.replyContent(),
+                message.replySender(), message.messageHash(), message.duplicateCount()
+            ));
+        }
+        savedHistories.put(currentWorldKey, data);
+        Path file = getHistoryFile();
+        try {
+            Files.createDirectories(file.getParent());
+            Path temp = file.resolveSibling(file.getFileName() + ".tmp");
+            try (Writer writer = Files.newBufferedWriter(temp, StandardCharsets.UTF_8)) {
+                GSON.toJson(savedHistories, writer);
+            }
+            Files.move(temp, file, java.nio.file.StandardCopyOption.REPLACE_EXISTING);
+        } catch (Exception ignored) {}
     }
 
     private static Path getTitlesFile() {

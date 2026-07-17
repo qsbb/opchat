@@ -333,11 +333,17 @@ public class ChatBubbleScreen extends Screen {
     }
 
     private void onEdited(String text) {
-        if (commandSuggestions != null) {
-            commandSuggestions.setWindowActive(text.startsWith("/"));
-            commandSuggestions.refresh();
-        }
-        if (!suppressHistoryReset) {
+        if (suppressHistoryReset) {
+            // 历史记录导航中：关闭命令补全，保留历史列表显示
+            if (commandSuggestions != null) {
+                commandSuggestions.setWindowActive(false);
+            }
+        } else {
+            // 用户手动编辑：关闭历史列表，刷新命令补全
+            if (commandSuggestions != null) {
+                commandSuggestions.setWindowActive(text.startsWith("/"));
+                commandSuggestions.refresh();
+            }
             historyPos = client.inGameHud.getChatHud().getMessageHistory().size();
             historyListVisible = false;
         }
@@ -415,6 +421,11 @@ public class ChatBubbleScreen extends Screen {
             if (quickCmdDisplayField.isFocused()) return quickCmdDisplayField.keyPressed(keyInput);
             return quickCmdCommandField.keyPressed(keyInput);
         }
+        if (historyListVisible && ChatBubbleConfig.SEND_HISTORY_PREVIEW
+            && (keyCode == 265 || keyCode == 264)) {
+            moveInHistory(keyCode == 265 ? -1 : 1);
+            return true;
+        }
         if (commandSuggestions != null && commandSuggestions.keyPressed(keyInput))
             return true;
         if (keyCode == 256) { close(); return true; }
@@ -446,6 +457,11 @@ public class ChatBubbleScreen extends Screen {
 
     @Override
     public boolean mouseScrolled(double mouseX, double mouseY, double horizontalAmount, double verticalAmount) {
+        if (historyListVisible && ChatBubbleConfig.SEND_HISTORY_PREVIEW
+            && getHistoryListHoverIndex((int) mouseX, (int) mouseY) >= 0) {
+            moveInHistory(verticalAmount > 0 ? -1 : 1);
+            return true;
+        }
         if (mouseX < SIDEBAR_W) {
             sidebarScroll -= (int) (verticalAmount * 3);
             sidebarScroll = Math.max(0, sidebarScroll);
@@ -687,6 +703,11 @@ public class ChatBubbleScreen extends Screen {
         // Reply bar cancel
         if (button == 0 && replyTargetIndex >= 0 && isMouseOverReplyCancel(mouseX, mouseY)) {
             replyTargetIndex = -1;
+            return true;
+        }
+
+        if (button == 0 && historyListVisible && ChatBubbleConfig.SEND_HISTORY_PREVIEW
+            && handleHistoryListClick((int) mouseX, (int) mouseY)) {
             return true;
         }
 
@@ -1811,6 +1832,37 @@ public class ChatBubbleScreen extends Screen {
         drawTextureIcon(context, TEX_SEND, sendX, iconY, ICON_S);
     }
 
+    private boolean handleHistoryListClick(int mouseX, int mouseY) {
+        var history = client.inGameHud.getChatHud().getMessageHistory();
+        int size = history.size();
+        if (size == 0) return false;
+
+        int listX = panelX + PAD;
+        int listW = panelW - 2 * PAD;
+        int itemH = 14;
+        int startIdx = Math.max(0, historyPos - 3);
+        int endIdx = Math.min(size, startIdx + 8);
+        startIdx = Math.max(0, endIdx - 8);
+        int count = endIdx - startIdx;
+        int listTop = barTop - (count * itemH + 6);
+        if (mouseX < listX || mouseX >= listX + listW
+            || mouseY < listTop + 3 || mouseY >= listTop + 3 + count * itemH) {
+            return false;
+        }
+
+        int index = startIdx + (mouseY - listTop - 3) / itemH;
+        if (index < startIdx || index >= endIdx) return false;
+        suppressHistoryReset = true;
+        input.setText(history.get(index));
+        input.setCursorToEnd(false);
+        suppressHistoryReset = false;
+        historyPos = index;
+        historyListVisible = false;
+        input.setFocused(true);
+        setFocused(input);
+        return true;
+    }
+
     private void renderHistoryList(DrawContext context, int mouseX, int mouseY) {
         var history = client.inGameHud.getChatHud().getMessageHistory();
         int size = history.size();
@@ -1837,21 +1889,55 @@ public class ChatBubbleScreen extends Screen {
         context.fill(listX, listTop, listX + 1, listBottom, COLOR_DIVIDER);
         context.fill(listX + listW - 1, listTop, listX + listW, listBottom, COLOR_DIVIDER);
 
+        int hoverIdx = getHistoryListHoverIndex(mouseX, mouseY);
         for (int i = 0; i < count; i++) {
             int idx = startIdx + i;
             int entryY = listTop + 3 + i * itemH;
             boolean isCurrent = (idx == historyPos);
+            boolean isHover = (idx == hoverIdx && !isCurrent);
 
             if (isCurrent) {
                 context.fill(listX + 2, entryY - 1, listX + listW - 2, entryY + itemH - 2, 0xFF3A5A8A);
+            } else if (isHover) {
+                context.fill(listX + 2, entryY - 1, listX + listW - 2, entryY + itemH - 2, 0xFF2E2E2E);
             }
 
             String text = history.get(idx);
             String trimmed = textRenderer.trimToWidth(text, listW - 14);
             if (!trimmed.equals(text)) trimmed = textRenderer.trimToWidth(text, listW - 20) + "...";
-            int color = isCurrent ? 0xFFFFFFFF : 0xFFAAAAAA;
+            int color = isCurrent ? 0xFFFFFFFF : (isHover ? 0xFFDDDDDD : 0xFFAAAAAA);
             context.drawText(textRenderer, Text.literal(trimmed), listX + 6, entryY, color, false);
         }
+    }
+
+    // 计算鼠标在历史记录列表中悬停的条目索引，不在列表内返回 -1
+    private int getHistoryListHoverIndex(int mouseX, int mouseY) {
+        var history = client.inGameHud.getChatHud().getMessageHistory();
+        int size = history.size();
+        if (size == 0) return -1;
+
+        int listX = panelX + PAD;
+        int listW = panelW - 2 * PAD;
+        int itemH = 14;
+        int maxItems = 8;
+
+        int startIdx = Math.max(0, historyPos - 3);
+        int endIdx = Math.min(size, startIdx + maxItems);
+        startIdx = Math.max(0, endIdx - maxItems);
+        int count = endIdx - startIdx;
+        if (count <= 0) return -1;
+
+        int listH = count * itemH + 6;
+        int listBottom = barTop;
+        int listTop = listBottom - listH;
+
+        if (mouseX < listX || mouseX >= listX + listW
+            || mouseY < listTop + 3 || mouseY >= listTop + 3 + count * itemH) {
+            return -1;
+        }
+        int index = startIdx + (mouseY - listTop - 3) / itemH;
+        if (index < startIdx || index >= endIdx) return -1;
+        return index;
     }
 
     private void loadIconTextures() {
@@ -2026,7 +2112,7 @@ public class ChatBubbleScreen extends Screen {
             client.player.networkHandler.sendChatCommand(text.substring(1));
         else
             client.player.networkHandler.sendChatMessage(text);
-        client.inGameHud.getChatHud().addToMessageHistory(text);
+        addToHistoryAndDeduplicate(text);
 
         if (!isWhisper) {
             ChatMessageStore.addMessage(Text.literal(text),
@@ -2435,7 +2521,7 @@ public class ChatBubbleScreen extends Screen {
         } else {
             client.player.networkHandler.sendChatMessage(command);
         }
-        client.inGameHud.getChatHud().addToMessageHistory(command);
+        addToHistoryAndDeduplicate(command);
 
         // Show the command in the current chat history
         if (client.player != null) {
@@ -2459,7 +2545,7 @@ public class ChatBubbleScreen extends Screen {
         } else {
             client.player.networkHandler.sendChatMessage(command);
         }
-        client.inGameHud.getChatHud().addToMessageHistory(command);
+        addToHistoryAndDeduplicate(command);
         if (client.player != null) {
             ChatMessageStore.addMessage(Text.literal(command), client.player.getUuid(), client.player.getName(), false);
             scrollToBottom = true;
@@ -2545,7 +2631,7 @@ public class ChatBubbleScreen extends Screen {
             client.player.networkHandler.sendChatCommand(text.substring(1));
         else
             client.player.networkHandler.sendChatMessage(text);
-        client.inGameHud.getChatHud().addToMessageHistory(text);
+        addToHistoryAndDeduplicate(text);
 
         if (!isWhisper) {
             ChatMessageStore.addMessage(Text.literal(text),
@@ -2577,6 +2663,18 @@ public class ChatBubbleScreen extends Screen {
                 historyPos = newPos;
             }
             historyListVisible = true;
+        }
+    }
+
+    // 添加到发送历史，并对相同命令去重：仅保留每个命令最新发送的一条
+    private void addToHistoryAndDeduplicate(String text) {
+        addToHistoryAndDeduplicate(text);
+        var history = client.inGameHud.getChatHud().getMessageHistory();
+        java.util.Set<String> seen = new java.util.HashSet<>();
+        for (int i = history.size() - 1; i >= 0; i--) {
+            if (!seen.add(history.get(i))) {
+                history.remove(i);
+            }
         }
     }
 

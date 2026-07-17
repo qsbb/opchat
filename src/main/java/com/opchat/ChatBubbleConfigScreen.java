@@ -97,6 +97,10 @@ public class ChatBubbleConfigScreen extends Screen {
                 y = addSection(y, rightBase, "\u79c1\u804a\u4e0e\u5386\u53f2");
                 y = addIntInput(y, rightBase, inputX, "opchat.config.whisper_history_days", String.valueOf(ChatBubbleConfig.WHISPER_HISTORY_DAYS), 0, 365, v -> ChatBubbleConfig.WHISPER_HISTORY_DAYS = v);
                 y = addToggle(y, rightBase, inputX, "opchat.config.send_history_preview", ChatBubbleConfig.SEND_HISTORY_PREVIEW, v -> ChatBubbleConfig.SEND_HISTORY_PREVIEW = v);
+                y = addToggle(y, rightBase, inputX, "opchat.config.chat_history_save", ChatBubbleConfig.CHAT_HISTORY_SAVE, v -> {
+                    ChatBubbleConfig.CHAT_HISTORY_SAVE = v;
+                    ChatMessageStore.setHistorySavingEnabled(v);
+                });
             }
             case 5 -> {
                 y = addSection(y, rightBase, "\u5feb\u6377\u6307\u4ee4");
@@ -106,6 +110,13 @@ public class ChatBubbleConfigScreen extends Screen {
                 y = addSection(y, rightBase, "\u517c\u5bb9\u6027");
                 y = addToggle(y, rightBase, inputX, "opchat.config.system_chat_as_bubble", ChatBubbleConfig.SYSTEM_CHAT_AS_BUBBLE, v -> ChatBubbleConfig.SYSTEM_CHAT_AS_BUBBLE = v);
                 y = addToggle(y, rightBase, inputX, "opchat.config.chat_report_compat", ChatBubbleConfig.CHAT_REPORT_COMPAT, v -> ChatBubbleConfig.CHAT_REPORT_COMPAT = v);
+                y = addToggle(y, rightBase, inputX, "opchat.config.ime_blocker", ChatBubbleConfig.IME_BLOCKER_ENABLED, v -> {
+                    ChatBubbleConfig.IME_BLOCKER_ENABLED = v;
+                    // 开关切换后立即应用到当前状态
+                    if (v) {
+                        com.opchat.ime.IMEBlocker.enableIME();
+                    }
+                });
             }
             case 7 -> {
                 y = addSection(y, rightBase, "\u8054\u7cfb\u4eba\u5206\u7ec4");
