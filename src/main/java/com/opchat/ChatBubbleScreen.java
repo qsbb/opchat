@@ -2727,11 +2727,11 @@ public class ChatBubbleScreen extends Screen {
     }
 
     // 展示手持物品：用 tellraw 发送一条带 hover 物品的消息到公屏
+    // 1.21.5+ 文本组件改用 SNBT 格式，hover_event 字段内联（不再嵌套 contents）
     private void sendItemShowcase() {
         if (client.player == null) return;
         var mainHand = client.player.getMainHandStack();
         if (mainHand.isEmpty()) {
-            // 手中没有物品，简单提示
             return;
         }
 
@@ -2739,20 +2739,40 @@ public class ChatBubbleScreen extends Screen {
         var result = net.minecraft.item.ItemStack.OPTIONAL_CODEC.encodeStart(
             net.minecraft.nbt.NbtOps.INSTANCE, mainHand);
         var nbtOpt = result.result();
-        if (nbtOpt.isEmpty()) return;
-        String nbtJson = nbtOpt.get().toString();
+        if (nbtOpt.isEmpty() || !(nbtOpt.get() instanceof net.minecraft.nbt.NbtCompound stackNbt)) return;
 
         String playerName = client.player.getName().getString();
         String itemDisplay = mainHand.getName().getString();
 
-        com.google.gson.Gson gson = new com.google.gson.Gson();
-        String json = "[" +
-            "{\"text\":" + gson.toJson("[" + playerName + "] ") + ",\"color\":\"gray\"}," +
-            "{\"text\":" + gson.toJson("\u5c55\u793a\u4e86 ") + ",\"color\":\"gray\"}," +
-            "{\"text\":" + gson.toJson("[" + itemDisplay + "]") + ",\"color\":\"aqua\"," +
-            "\"hoverEvent\":{\"action\":\"show_item\",\"contents\":" + nbtJson + "}}" +
-            "]";
-        client.player.networkHandler.sendChatCommand("tellraw @a " + json);
+        // 构建完整的 tellraw 消息 SNBT
+        net.minecraft.nbt.NbtList root = new net.minecraft.nbt.NbtList();
+
+        net.minecraft.nbt.NbtCompound part1 = new net.minecraft.nbt.NbtCompound();
+        part1.putString("text", "[" + playerName + "] ");
+        part1.putString("color", "gray");
+        root.add(part1);
+
+        net.minecraft.nbt.NbtCompound part2 = new net.minecraft.nbt.NbtCompound();
+        part2.putString("text", "\u5c55\u793a\u4e86 ");
+        part2.putString("color", "gray");
+        root.add(part2);
+
+        net.minecraft.nbt.NbtCompound part3 = new net.minecraft.nbt.NbtCompound();
+        part3.putString("text", "[" + itemDisplay + "]");
+        part3.putString("color", "aqua");
+
+        // hover_event: action + 物品的 id/count/components 字段内联
+        net.minecraft.nbt.NbtCompound hoverEvent = new net.minecraft.nbt.NbtCompound();
+        hoverEvent.putString("action", "show_item");
+        for (String key : stackNbt.getKeys()) {
+            var el = stackNbt.get(key);
+            if (el != null) hoverEvent.put(key, el);
+        }
+        part3.put("hover_event", hoverEvent);
+        root.add(part3);
+
+        String snbt = root.toString();
+        client.player.networkHandler.sendChatCommand("tellraw @a " + snbt);
     }
 
     private void moveInHistory(int delta) {
