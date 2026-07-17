@@ -128,6 +128,15 @@ public class ChatBubbleScreen extends Screen {
     private static final int QUICK_PANEL_W = 180;
     private static final int QUICK_ITEM_H = 18;
     private static final int QUICK_EDIT_H = 22;
+    private static final int DRAG_HANDLE_W = 12; // 拖拽手柄宽度
+
+    // Quick input drag sorting
+    private boolean quickInputDragging;
+    private int quickInputDragIndex = -1;
+
+    // Quick command drag sorting
+    private boolean quickCmdDragging;
+    private int quickCmdDragIndex = -1;
 
     // Quick commands (/ shortcut)
     private int slashIconX;
@@ -832,6 +841,78 @@ public class ChatBubbleScreen extends Screen {
             }
         }
         return super.mouseClicked(click, bl);
+    }
+
+    @Override
+    public boolean mouseDragged(Click click, double offsetX, double offsetY) {
+        int button = click.button();
+        if (button != 0) return super.mouseDragged(click, offsetX, offsetY);
+        double mouseX = click.x();
+        double mouseY = click.y();
+
+        // 快捷输入拖拽中：根据当前 y 位置与其它项交换顺序
+        if (quickInputDragging && quickInputDragIndex >= 0 && quickPanelOpen) {
+            int[] b = getQuickPanelBounds();
+            int py = b[1];
+            int editY = py + 4;
+            int listY = editY + QUICK_EDIT_H + 2;
+            int relY = (int) mouseY - listY;
+            if (relY >= 0) {
+                int newIndex = relY / QUICK_ITEM_H;
+                int size = ChatBubbleConfig.QUICK_INPUTS.size();
+                if (newIndex < 0) newIndex = 0;
+                if (newIndex >= size) newIndex = size - 1;
+                if (newIndex != quickInputDragIndex) {
+                    String moved = ChatBubbleConfig.QUICK_INPUTS.remove(quickInputDragIndex);
+                    ChatBubbleConfig.QUICK_INPUTS.add(newIndex, moved);
+                    ChatBubbleConfig.save();
+                    quickInputDragIndex = newIndex;
+                }
+            }
+            return true;
+        }
+
+        // 快捷指令拖拽中
+        if (quickCmdDragging && quickCmdDragIndex >= 0 && quickCmdPanelOpen) {
+            int[] b = getQuickCmdPanelBounds();
+            int py = b[1];
+            int headerY = py + 4;
+            int listY = headerY + 22;
+            int relY = (int) mouseY - listY;
+            if (relY >= 0) {
+                int newIndex = relY / QUICK_CMD_ITEM_H;
+                var list = getActiveQuickCommandList();
+                int size = list.size();
+                if (newIndex < 0) newIndex = 0;
+                if (newIndex >= size) newIndex = size - 1;
+                if (newIndex != quickCmdDragIndex) {
+                    var moved = list.remove(quickCmdDragIndex);
+                    list.add(newIndex, moved);
+                    ChatBubbleConfig.save();
+                    quickCmdDragIndex = newIndex;
+                }
+            }
+            return true;
+        }
+
+        return super.mouseDragged(click, offsetX, offsetY);
+    }
+
+    @Override
+    public boolean mouseReleased(Click click) {
+        if (click.button() == 0) {
+            if (quickInputDragging) {
+                quickInputDragging = false;
+                quickInputDragIndex = -1;
+                return true;
+            }
+            if (quickCmdDragging) {
+                quickCmdDragging = false;
+                quickCmdDragIndex = -1;
+                return true;
+            }
+        }
+        return super.mouseReleased(click);
     }
 
     private boolean handleIconClick(int mx, int my) {
@@ -1856,11 +1937,11 @@ public class ChatBubbleScreen extends Screen {
         context.fill(ibX, ibY - 1, ibX + ibW, ibY, COLOR_DIVIDER);
         context.fill(ibX, ibY, ibX + ibW, ibY + ibH, colorInputBg);
 
-        // / quick command button
+        // / 快捷指令按钮（带背景）
         boolean hoverSlash = mouseX >= slashX && mouseX <= slashX + ICON_S
             && mouseY >= iconY && mouseY <= iconY + ICON_S;
-        if (hoverSlash || quickCmdPanelOpen)
-            context.fill(slashX - 1, iconY - 1, slashX + ICON_S + 1, iconY + ICON_S + 1, 0xFF444444);
+        int slashBg = (hoverSlash || quickCmdPanelOpen) ? 0xFF4A4A4A : 0xFF333333;
+        context.fill(slashX - 1, iconY - 1, slashX + ICON_S + 1, iconY + ICON_S + 1, slashBg);
         int slashColor = (hoverSlash || quickCmdPanelOpen) ? 0xFFFFFFFF : 0xFFCCCCCC;
         int slashTextW = textRenderer.getWidth("/");
         context.drawText(textRenderer, Text.literal("/"),
@@ -1868,18 +1949,24 @@ public class ChatBubbleScreen extends Screen {
             iconY + (ICON_S - textRenderer.fontHeight) / 2,
             slashColor, false);
 
+        // 快捷发送按钮（三横图标 + 背景）
         boolean hoverQuick = mouseX >= quickIconX && mouseX <= quickIconX + ICON_S
             && mouseY >= iconY && mouseY <= iconY + ICON_S;
-        if (hoverQuick || quickPanelOpen)
-            context.fill(quickIconX - 1, iconY - 1, quickIconX + ICON_S + 1, iconY + ICON_S + 1, 0xFF444444);
+        int quickBg = (hoverQuick || quickPanelOpen) ? 0xFF4A4A4A : 0xFF333333;
+        context.fill(quickIconX - 1, iconY - 1, quickIconX + ICON_S + 1, iconY + ICON_S + 1, quickBg);
         int quickColor = (hoverQuick || quickPanelOpen) ? 0xFFFFFFFF : 0xFFCCCCCC;
-        context.drawText(textRenderer, Text.literal("\u26A1"), quickIconX + 1, iconY - 1, quickColor, false);
+        // 三横图标
+        int cx = quickIconX + ICON_S / 2;
+        for (int line = 0; line < 3; line++) {
+            int ly = iconY + 4 + line * 3;
+            context.fill(cx - 4, ly, cx + 4, ly + 1, quickColor);
+        }
 
-        // 展示手持物品按钮
+        // 展示手持物品按钮（带背景）
         boolean hoverItem = mouseX >= itemIconX && mouseX <= itemIconX + ICON_S
             && mouseY >= iconY && mouseY <= iconY + ICON_S;
-        if (hoverItem)
-            context.fill(itemIconX - 1, iconY - 1, itemIconX + ICON_S + 1, iconY + ICON_S + 1, 0xFF444444);
+        int itemBg = hoverItem ? 0xFF4A4A4A : 0xFF333333;
+        context.fill(itemIconX - 1, iconY - 1, itemIconX + ICON_S + 1, iconY + ICON_S + 1, itemBg);
         int itemColor = hoverItem ? 0xFFFFFFFF : 0xFFCCCCCC;
         String itemLabel = "\u7269";
         int itemTextW = textRenderer.getWidth(itemLabel);
@@ -1888,9 +1975,11 @@ public class ChatBubbleScreen extends Screen {
             iconY + (ICON_S - textRenderer.fontHeight) / 2,
             itemColor, false);
 
+        // 发送按钮（带背景）
         boolean hoverSend = mouseX >= sendX && mouseX <= sendX + ICON_S
             && mouseY >= iconY && mouseY <= iconY + ICON_S;
-        if (hoverSend) context.fill(sendX - 1, iconY - 1, sendX + ICON_S + 1, iconY + ICON_S + 1, 0xFF444444);
+        int sendBg = hoverSend ? 0xFF4A4A4A : 0xFF333333;
+        context.fill(sendX - 1, iconY - 1, sendX + ICON_S + 1, iconY + ICON_S + 1, sendBg);
         drawTextureIcon(context, TEX_SEND, sendX, iconY, ICON_S);
     }
 
@@ -2069,17 +2158,35 @@ public class ChatBubbleScreen extends Screen {
             int itemX = px + 4;
             int itemY = listY + i * QUICK_ITEM_H;
             int itemW = pw - 8;
-            int textW = itemW - 16 - 8;
+            // 布局: [拖拽手柄] [文本...] [删除x]
+            int textW = itemW - DRAG_HANDLE_W - 16;
+            int handleX = itemX;
+            int textX = itemX + DRAG_HANDLE_W + 2;
+            int delX = itemX + itemW - 14;
 
-            boolean hoverItem = mouseX >= itemX && mouseX <= itemX + itemW - 16
+            boolean isDraggingThis = quickInputDragging && quickInputDragIndex == i;
+            int itemBg = isDraggingThis ? 0xFF3A5A8A : 0xFF2E2E2E;
+            context.fill(itemX, itemY, itemX + itemW - 1, itemY + QUICK_ITEM_H - 2, itemBg);
+
+            // 拖拽手柄
+            boolean hoverHandle = mouseX >= handleX && mouseX <= handleX + DRAG_HANDLE_W
                 && mouseY >= itemY && mouseY <= itemY + QUICK_ITEM_H - 2;
-            if (hoverItem) context.fill(itemX, itemY, itemX + itemW - 16, itemY + QUICK_ITEM_H - 2, 0xFF3A3A3A);
+            context.fill(handleX, itemY, handleX + DRAG_HANDLE_W, itemY + QUICK_ITEM_H - 2,
+                hoverHandle || isDraggingThis ? 0xFF4A4A4A : 0xFF333333);
+            // 三横图标
+            int cx = handleX + DRAG_HANDLE_W / 2;
+            for (int line = 0; line < 3; line++) {
+                int ly = itemY + 5 + line * 3;
+                context.fill(cx - 3, ly, cx + 3, ly + 1, 0xFFAAAAAA);
+            }
+
+            boolean hoverItem = mouseX >= textX && mouseX <= delX
+                && mouseY >= itemY && mouseY <= itemY + QUICK_ITEM_H - 2;
 
             String display = textRenderer.trimToWidth(text, textW);
             if (!display.equals(text)) display = textRenderer.trimToWidth(text, textW - 6) + "...";
-            context.drawText(textRenderer, Text.literal(display), itemX + 4, itemY + 4, 0xFFEEEEEE, false);
+            context.drawText(textRenderer, Text.literal(display), textX, itemY + 4, 0xFFEEEEEE, false);
 
-            int delX = itemX + itemW - 14;
             boolean hoverDel = mouseX >= delX && mouseX <= delX + 12
                 && mouseY >= itemY && mouseY <= itemY + QUICK_ITEM_H - 2;
             context.fill(delX, itemY, delX + 12, itemY + QUICK_ITEM_H - 2, hoverDel ? 0xFF553333 : 0xFF333333);
@@ -2113,7 +2220,16 @@ public class ChatBubbleScreen extends Screen {
             int itemX = px + 4;
             int itemY = listY + i * QUICK_ITEM_H;
             int itemW = pw - 8;
+            int handleX = itemX;
+            int textX = itemX + DRAG_HANDLE_W + 2;
             int delX = itemX + itemW - 14;
+
+            // 拖拽手柄：开始拖拽
+            if (mx >= handleX && mx <= handleX + DRAG_HANDLE_W && my >= itemY && my <= itemY + QUICK_ITEM_H - 2) {
+                quickInputDragging = true;
+                quickInputDragIndex = i;
+                return;
+            }
 
             if (mx >= delX && mx <= delX + 12 && my >= itemY && my <= itemY + QUICK_ITEM_H - 2) {
                 ChatBubbleConfig.QUICK_INPUTS.remove(i);
@@ -2121,7 +2237,7 @@ public class ChatBubbleScreen extends Screen {
                 return;
             }
 
-            if (mx >= itemX && mx <= itemX + itemW - 16 && my >= itemY && my <= itemY + QUICK_ITEM_H - 2) {
+            if (mx >= textX && mx <= delX && my >= itemY && my <= itemY + QUICK_ITEM_H - 2) {
                 sendQuickInput(ChatBubbleConfig.QUICK_INPUTS.get(i));
                 return;
             }
@@ -2262,18 +2378,32 @@ public class ChatBubbleScreen extends Screen {
             int itemX = px + 4;
             int itemY = listY + i * QUICK_CMD_ITEM_H;
             int itemW = pw - 8;
-            int textW = itemW - 28;
+            // 布局: [拖拽手柄] [文本] [编辑] [删除x]
+            int textW = itemW - DRAG_HANDLE_W - 28;
+            int handleX = itemX;
+            int textStartX = itemX + DRAG_HANDLE_W + 2;
 
-            boolean hoverItem = mouseX >= itemX && mouseX <= itemX + textW
+            boolean isDraggingThis = quickCmdDragging && quickCmdDragIndex == i;
+            int itemBg = isDraggingThis ? 0xFF3A5A8A : 0xFF2E2E2E;
+            context.fill(itemX, itemY, itemX + itemW - 1, itemY + QUICK_CMD_ITEM_H - 2, itemBg);
+
+            // 拖拽手柄
+            boolean hoverHandle = mouseX >= handleX && mouseX <= handleX + DRAG_HANDLE_W
                 && mouseY >= itemY && mouseY <= itemY + QUICK_CMD_ITEM_H - 2;
-            if (hoverItem) context.fill(itemX, itemY, itemX + textW, itemY + QUICK_CMD_ITEM_H - 2, 0xFF3A3A3A);
+            context.fill(handleX, itemY, handleX + DRAG_HANDLE_W, itemY + QUICK_CMD_ITEM_H - 2,
+                hoverHandle || isDraggingThis ? 0xFF4A4A4A : 0xFF333333);
+            int cx = handleX + DRAG_HANDLE_W / 2;
+            for (int line = 0; line < 3; line++) {
+                int ly = itemY + 5 + line * 3;
+                context.fill(cx - 3, ly, cx + 3, ly + 1, 0xFFAAAAAA);
+            }
 
             String display = cmd.getDisplay();
             String shown = textRenderer.trimToWidth(display, textW - 8);
             if (!shown.equals(display)) shown = textRenderer.trimToWidth(display, textW - 14) + "...";
-            context.drawText(textRenderer, Text.literal(shown), itemX + 4, itemY + 4, 0xFFEEEEEE, false);
+            context.drawText(textRenderer, Text.literal(shown), textStartX, itemY + 4, 0xFFEEEEEE, false);
 
-            int editX = itemX + textW + 2;
+            int editX = itemX + itemW - 28;
             int editW = 12;
             boolean hoverEdit = mouseX >= editX && mouseX <= editX + editW && mouseY >= itemY && mouseY <= itemY + QUICK_CMD_ITEM_H - 2;
             context.fill(editX, itemY, editX + editW, itemY + QUICK_CMD_ITEM_H - 2, hoverEdit ? 0xFF444444 : 0xFF333333);
@@ -2382,11 +2512,18 @@ public class ChatBubbleScreen extends Screen {
             int itemX = px + 4;
             int itemY = listY + i * QUICK_CMD_ITEM_H;
             int itemW = pw - 8;
-            int textW = itemW - 28;
-            int editX = itemX + textW + 2;
+            int handleX = itemX;
+            int editX = itemX + itemW - 28;
             int editW = 12;
             int delX = editX + editW + 2;
             int delW = 12;
+
+            // 拖拽手柄
+            if (mx >= handleX && mx <= handleX + DRAG_HANDLE_W && my >= itemY && my <= itemY + QUICK_CMD_ITEM_H - 2) {
+                quickCmdDragging = true;
+                quickCmdDragIndex = i;
+                return;
+            }
 
             if (mx >= delX && mx <= delX + delW && my >= itemY && my <= itemY + QUICK_CMD_ITEM_H - 2) {
                 getActiveQuickCommandList().remove(i);
@@ -2407,7 +2544,10 @@ public class ChatBubbleScreen extends Screen {
                 return;
             }
 
-            if (mx >= itemX && mx <= itemX + textW && my >= itemY && my <= itemY + QUICK_CMD_ITEM_H - 2) {
+            // 文本区域点击（排除手柄、编辑、删除）
+            int textEndX = editX;
+            int textStartX = handleX + DRAG_HANDLE_W + 2;
+            if (mx >= textStartX && mx <= textEndX && my >= itemY && my <= itemY + QUICK_CMD_ITEM_H - 2) {
                 executeQuickCommand(getActiveQuickCommandList().get(i));
                 return;
             }
@@ -2528,13 +2668,9 @@ public class ChatBubbleScreen extends Screen {
             quickCmdEditing = false;
             quickCmdDisplayField.setVisible(false);
             quickCmdCommandField.setVisible(false);
-            if (selectedContact == null && !input.getText().startsWith("/")) {
-                input.setText("/");
-                input.setCursorToEnd(false);
-                if (commandSuggestions != null) {
-                    commandSuggestions.setWindowActive(true);
-                    commandSuggestions.refresh();
-                }
+            // 不预输入 /，也不激活命令提示；用户手动编辑输入框后才弹出补全
+            if (commandSuggestions != null) {
+                commandSuggestions.setWindowActive(false);
             }
             input.setFocused(true);
             setFocused(input);
