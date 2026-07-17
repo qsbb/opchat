@@ -23,6 +23,11 @@ public class ChatBubbleModClient implements ClientModInitializer {
     public void onInitializeClient() {
         ChatBubbleConfig.load();
 
+        // 游戏启动时若已开启输入法冲突修复，立即禁用游戏内输入法
+        if (ChatBubbleConfig.IME_BLOCKER_ENABLED && IMEBlocker.isSupported()) {
+            IMEBlocker.disableIME();
+        }
+
         // Intercept vanilla ChatScreen opening
         ScreenEvents.AFTER_INIT.register((client, screen, scaledWidth, scaledHeight) -> {
             if (!ChatBubbleConfig.ENABLED) return;
