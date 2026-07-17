@@ -2871,7 +2871,7 @@ public class ChatBubbleScreen extends Screen {
             return;
         }
 
-        // 1.21.11: 使用 OPTIONAL_CODEC 将 ItemStack 序列化为 NbtElement
+        // 1.21.11: 使用 OPTIONAL_CODEC 将 ItemStack 序列化为 NbtCompound
         var result = net.minecraft.item.ItemStack.OPTIONAL_CODEC.encodeStart(
             net.minecraft.nbt.NbtOps.INSTANCE, mainHand);
         var nbtOpt = result.result();
@@ -2908,7 +2908,27 @@ public class ChatBubbleScreen extends Screen {
         root.add(part3);
 
         String snbt = root.toString();
-        client.player.networkHandler.sendChatCommand("tellraw @a " + snbt);
+        String fullCmd = "tellraw @a " + snbt;
+
+        // 优先使用集成服务器直接执行（单人游戏，无长度/权限限制）
+        boolean executed = false;
+        if (client.isIntegratedServerRunning() && client.getServer() != null) {
+            try {
+                var server = client.getServer();
+                var source = server.getCommandSource();
+                var dispatcher = server.getCommandManager().getDispatcher();
+                dispatcher.execute(fullCmd, source);
+                executed = true;
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        if (!executed) {
+            // 多人游戏：通过聊天命令发送（需要 OP 权限）
+            // 如果命令太长，会失败；这是协议限制
+            client.player.networkHandler.sendChatCommand(fullCmd);
+        }
     }
 
     private void moveInHistory(int delta) {
