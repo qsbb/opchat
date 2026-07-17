@@ -62,10 +62,14 @@ public class ChatBubbleModClient implements ClientModInitializer {
             ChatMessageStore.tickPreview();
             ChatMessageStore.tickStrongHint();
 
-            // 屏幕关闭回到游戏内时禁用输入法
+            // 屏幕状态变化时控制输入法
             Screen current = client.currentScreen;
             if (lastScreen != null && current == null) {
+                // 从屏幕退出到游戏内：禁用输入法
                 handleIMEForScreen(null);
+            } else if (current == null && ChatBubbleConfig.IME_BLOCKER_ENABLED && IMEBlocker.isSupported()) {
+                // 游戏内（无屏幕）持续保持输入法关闭，防止被其他因素重新打开
+                IMEBlocker.disableIME();
             }
             lastScreen = current;
         });
