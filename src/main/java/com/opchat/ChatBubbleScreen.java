@@ -84,7 +84,7 @@ public class ChatBubbleScreen extends Screen {
     // Right-click menu
     private int contextMsgIndex = -1;
     private int contextX, contextY;
-    private static final int CTX_W = 80;
+    private static final int CTX_W = 110;
     private static final int CTX_ITEM_H = 18;
 
     // Bubble hit tracking
@@ -124,6 +124,7 @@ public class ChatBubbleScreen extends Screen {
     private boolean quickPanelOpen;
     private TextFieldWidget quickEditField;
     private int quickIconX;
+    private int itemIconX; // 展示手持物品按钮位置
     private static final int QUICK_PANEL_W = 180;
     private static final int QUICK_ITEM_H = 18;
     private static final int QUICK_EDIT_H = 22;
@@ -199,9 +200,10 @@ public class ChatBubbleScreen extends Screen {
         inputY = ibY;
         int sendX = panelX + panelW - PAD - ICON_S;
         quickIconX = sendX - ICON_S - 6;
+        itemIconX = quickIconX - ICON_S - 4; // 展示手持物品按钮
         slashIconX = panelX + PAD;
         int inputX = slashIconX + ICON_S + 4;
-        int inputW = quickIconX - 6 - inputX;
+        int inputW = itemIconX - 6 - inputX;
 
         input = new TextFieldWidget(textRenderer, inputX, ibY, inputW, 20, Text.literal(""));
         input.setMaxLength(256);
@@ -499,7 +501,8 @@ public class ChatBubbleScreen extends Screen {
             boolean inPanel = b != null && mouseX >= b[0] && mouseX <= b[0] + b[2]
                 && mouseY >= b[1] && mouseY <= b[1] + b[3];
             int iconY = barTop + (BAR_H - ICON_S) / 2;
-            boolean onToggle = mouseX >= quickIconX && mouseX <= quickIconX + ICON_S
+            boolean onToggle = (mouseX >= quickIconX && mouseX <= quickIconX + ICON_S
+                || mouseX >= itemIconX && mouseX <= itemIconX + ICON_S)
                 && mouseY >= iconY && mouseY <= iconY + ICON_S;
             if (inPanel && button == 0) {
                 handleQuickPanelClick((int) mouseX, (int) mouseY);
@@ -517,7 +520,8 @@ public class ChatBubbleScreen extends Screen {
             boolean inPanel = b != null && mouseX >= b[0] && mouseX <= b[0] + b[2]
                 && mouseY >= b[1] && mouseY <= b[1] + b[3];
             int iconY = barTop + (BAR_H - ICON_S) / 2;
-            boolean onToggle = mouseX >= slashIconX && mouseX <= slashIconX + ICON_S
+            boolean onToggle = (mouseX >= slashIconX && mouseX <= slashIconX + ICON_S
+                || mouseX >= itemIconX && mouseX <= itemIconX + ICON_S)
                 && mouseY >= iconY && mouseY <= iconY + ICON_S;
             if (inPanel && button == 0) {
                 handleQuickCmdPanelClick((int) mouseX, (int) mouseY);
@@ -814,6 +818,18 @@ public class ChatBubbleScreen extends Screen {
                 Screen.handleClickEvent(clickEvent, client, this);
                 return true;
             }
+            // 气泡左键单击：复制消息内容到剪贴板
+            for (int[] r : bubbleRects) {
+                if (mouseX >= r[0] && mouseX <= r[0] + r[2]
+                    && mouseY >= r[1] && mouseY <= r[1] + r[3]) {
+                    ChatMessageStore.ChatMessage msg = getMessageAt(r[4]);
+                    if (msg != null) {
+                        client.keyboard.setClipboard(msg.content().getString());
+                        copyToastTicks = 20;
+                    }
+                    return true;
+                }
+            }
         }
         return super.mouseClicked(click, bl);
     }
@@ -829,6 +845,12 @@ public class ChatBubbleScreen extends Screen {
             toggleQuickPanel();
             return true;
         }
+        if (mx >= itemIconX && mx <= itemIconX + ICON_S && my >= iconY && my <= iconY + ICON_S) {
+            if (quickPanelOpen) closeQuickPanel();
+            if (quickCmdPanelOpen) closeQuickCmdPanel();
+            sendItemShowcase();
+            return true;
+        }
         int sendX = panelX + panelW - PAD - ICON_S;
         if (mx >= sendX && mx <= sendX + ICON_S && my >= iconY && my <= iconY + ICON_S) {
             sendMessage();
@@ -839,21 +861,37 @@ public class ChatBubbleScreen extends Screen {
 
     private void handleContextClick(int mx, int my) {
         ChatMessageStore.ChatMessage ctxMsg = getMessageAt(contextMsgIndex);
-        int menuH = CTX_ITEM_H * 2 + 1;
+        int menuH = CTX_ITEM_H * 3 + 2;
         int menuX = Math.min(contextX, panelX + panelW - CTX_W - 2);
         int menuY = contextY - menuH;
         if (menuY < msgTop) menuY = contextY + 4;
 
         if (mx >= menuX && mx <= menuX + CTX_W) {
-            if (my >= menuY && my <= menuY + CTX_ITEM_H) {
-                // Copy
-                if (ctxMsg != null) {
-                    client.keyboard.setClipboard(ctxMsg.content().getString());
-                    copyToastTicks = 20;
-                }
-            } else if (my >= menuY + CTX_ITEM_H + 1 && my <= menuY + menuH) {
-                // Quote
+            int item0Top = menuY;
+            int item0Bottom = menuY + CTX_ITEM_H;
+            int item1Top = menuY + CTX_ITEM_H + 1;
+            int item1Bottom = item1Top + CTX_ITEM_H;
+            int item2Top = menuY + (CTX_ITEM_H + 1) * 2;
+            int item2Bottom = item2Top + CTX_ITEM_H;
+
+            if (my >= item0Top && my <= item0Bottom) {
+                // 引用
                 replyTargetIndex = contextMsgIndex;
+            } else if (my >= item1Top && my <= item1Bottom) {
+                // 添加到快捷发送
+                if (ctxMsg != null) {
+                    String text = ctxMsg.content().getString();
+                    if (!text.isEmpty() && !ChatBubbleConfig.QUICK_INPUTS.contains(text)) {
+                        ChatBubbleConfig.QUICK_INPUTS.add(text);
+                        ChatBubbleConfig.save();
+                    }
+                }
+            } else if (my >= item2Top && my <= item2Bottom) {
+                // 添加到快捷指令（弹出编辑框，预填充消息内容）
+                if (ctxMsg != null) {
+                    String text = ctxMsg.content().getString();
+                    openQuickCmdEditorWith(text);
+                }
             }
         }
         contextMsgIndex = -1;
@@ -1453,13 +1491,10 @@ public class ChatBubbleScreen extends Screen {
         if (msg.duplicateCount() > 1) {
             String label = "x" + msg.duplicateCount();
             int labelW = textRenderer.getWidth(label);
-            int labelX, labelY = bubbleY + (bubbleH - textRenderer.fontHeight) / 2;
-            if (own) {
-                labelX = bubbleX - labelW - 3;
-            } else {
-                labelX = bubbleX + bubbleW + 3;
-            }
-            context.drawText(textRenderer, Text.literal(label), labelX, labelY, 0xFFFFAA00, false);
+            // 显示在气泡右下角内侧，字体很小
+            int labelX = bubbleX + bubbleW - labelW - 3;
+            int labelY = bubbleY + bubbleH - textRenderer.fontHeight / 2 - 1;
+            context.drawText(textRenderer, Text.literal(label), labelX, labelY, 0x99AAAAAA, false);
         }
 
         bubbleRects.add(new int[]{bubbleX, bubbleY, bubbleW, bubbleH, index});
@@ -1618,7 +1653,7 @@ public class ChatBubbleScreen extends Screen {
         }
 
         if (contextMsgIndex < 0) return;
-        int menuH = CTX_ITEM_H * 2 + 1;
+        int menuH = CTX_ITEM_H * 3 + 2;
         int menuX = Math.min(contextX, panelX + panelW - CTX_W - 2);
         int menuY = contextY - menuH;
         if (menuY < msgTop) menuY = contextY + 4;
@@ -1629,21 +1664,33 @@ public class ChatBubbleScreen extends Screen {
         context.fill(menuX, menuY, menuX + 1, menuY + menuH, COLOR_DIVIDER);
         context.fill(menuX + CTX_W - 1, menuY, menuX + CTX_W, menuY + menuH, COLOR_DIVIDER);
 
-        // Item 0: copy
-        boolean hoverCopy = mouseX >= menuX && mouseX <= menuX + CTX_W
-            && mouseY >= menuY && mouseY <= menuY + CTX_ITEM_H;
-        int copyBg = hoverCopy ? 0xFF4A4A4A : 0xFF3A3A3A;
-        context.fill(menuX + 1, menuY + 1, menuX + CTX_W - 1, menuY + CTX_ITEM_H, copyBg);
-        context.drawText(textRenderer, Text.translatable("opchat.context.copy"), menuX + 8, menuY + 4, 0xFFFFFFFF, false);
-
-        context.fill(menuX + 4, menuY + CTX_ITEM_H, menuX + CTX_W - 4, menuY + CTX_ITEM_H + 1, 0xFF555555);
-
-        // Item 1: quote
+        // Item 0: 引用
+        int item0Y = menuY;
         boolean hoverQuote = mouseX >= menuX && mouseX <= menuX + CTX_W
-            && mouseY >= menuY + CTX_ITEM_H + 1 && mouseY <= menuY + menuH;
+            && mouseY >= item0Y && mouseY <= item0Y + CTX_ITEM_H;
         int quoteBg = hoverQuote ? 0xFF4A4A4A : 0xFF3A3A3A;
-        context.fill(menuX + 1, menuY + CTX_ITEM_H + 1, menuX + CTX_W - 1, menuY + menuH - 1, quoteBg);
-        context.drawText(textRenderer, Text.translatable("opchat.context.quote"), menuX + 8, menuY + CTX_ITEM_H + 5, 0xFFFFFFFF, false);
+        context.fill(menuX + 1, item0Y + 1, menuX + CTX_W - 1, item0Y + CTX_ITEM_H, quoteBg);
+        context.drawText(textRenderer, Text.translatable("opchat.context.quote"), menuX + 8, item0Y + 4, 0xFFFFFFFF, false);
+
+        context.fill(menuX + 4, item0Y + CTX_ITEM_H, menuX + CTX_W - 4, item0Y + CTX_ITEM_H + 1, 0xFF555555);
+
+        // Item 1: 添加到快捷发送
+        int item1Y = menuY + CTX_ITEM_H + 1;
+        boolean hoverAddInput = mouseX >= menuX && mouseX <= menuX + CTX_W
+            && mouseY >= item1Y && mouseY <= item1Y + CTX_ITEM_H;
+        int addInputBg = hoverAddInput ? 0xFF4A4A4A : 0xFF3A3A3A;
+        context.fill(menuX + 1, item1Y + 1, menuX + CTX_W - 1, item1Y + CTX_ITEM_H, addInputBg);
+        context.drawText(textRenderer, Text.translatable("opchat.context.add_quick_input"), menuX + 8, item1Y + 4, 0xFFFFFFFF, false);
+
+        context.fill(menuX + 4, item1Y + CTX_ITEM_H, menuX + CTX_W - 4, item1Y + CTX_ITEM_H + 1, 0xFF555555);
+
+        // Item 2: 添加到快捷指令
+        int item2Y = menuY + (CTX_ITEM_H + 1) * 2;
+        boolean hoverAddCmd = mouseX >= menuX && mouseX <= menuX + CTX_W
+            && mouseY >= item2Y && mouseY <= item2Y + CTX_ITEM_H;
+        int addCmdBg = hoverAddCmd ? 0xFF4A4A4A : 0xFF3A3A3A;
+        context.fill(menuX + 1, item2Y + 1, menuX + CTX_W - 1, item2Y + CTX_ITEM_H, addCmdBg);
+        context.drawText(textRenderer, Text.translatable("opchat.context.add_quick_command"), menuX + 8, item2Y + 4, 0xFFFFFFFF, false);
     }
 
     private void renderAvatarMenu(DrawContext context, int mouseX, int mouseY) {
@@ -1804,7 +1851,7 @@ public class ChatBubbleScreen extends Screen {
         int sendX = panelX + panelW - PAD - ICON_S;
         int ibX = slashX + ICON_S + 4;
         int ibY = barTop + (BAR_H - 20) / 2;
-        int ibW = quickIconX - 6 - ibX;
+        int ibW = itemIconX - 6 - ibX;
         int ibH = 20;
         context.fill(ibX, ibY - 1, ibX + ibW, ibY, COLOR_DIVIDER);
         context.fill(ibX, ibY, ibX + ibW, ibY + ibH, colorInputBg);
@@ -1827,6 +1874,19 @@ public class ChatBubbleScreen extends Screen {
             context.fill(quickIconX - 1, iconY - 1, quickIconX + ICON_S + 1, iconY + ICON_S + 1, 0xFF444444);
         int quickColor = (hoverQuick || quickPanelOpen) ? 0xFFFFFFFF : 0xFFCCCCCC;
         context.drawText(textRenderer, Text.literal("\u26A1"), quickIconX + 1, iconY - 1, quickColor, false);
+
+        // 展示手持物品按钮
+        boolean hoverItem = mouseX >= itemIconX && mouseX <= itemIconX + ICON_S
+            && mouseY >= iconY && mouseY <= iconY + ICON_S;
+        if (hoverItem)
+            context.fill(itemIconX - 1, iconY - 1, itemIconX + ICON_S + 1, iconY + ICON_S + 1, 0xFF444444);
+        int itemColor = hoverItem ? 0xFFFFFFFF : 0xFFCCCCCC;
+        String itemLabel = "\u7269";
+        int itemTextW = textRenderer.getWidth(itemLabel);
+        context.drawText(textRenderer, Text.literal(itemLabel),
+            itemIconX + (ICON_S - itemTextW) / 2,
+            iconY + (ICON_S - textRenderer.fontHeight) / 2,
+            itemColor, false);
 
         boolean hoverSend = mouseX >= sendX && mouseX <= sendX + ICON_S
             && mouseY >= iconY && mouseY <= iconY + ICON_S;
@@ -2481,6 +2541,25 @@ public class ChatBubbleScreen extends Screen {
         }
     }
 
+    // 从右键菜单"添加到快捷指令"打开编辑表单，预填充消息内容
+    private void openQuickCmdEditorWith(String presetText) {
+        if (!quickCmdPanelOpen) {
+            quickCmdPanelOpen = true;
+        }
+        quickCmdEditing = true;
+        quickCmdEditIndex = -1;
+        quickCmdDisplayField.setText("");
+        quickCmdCommandField.setText(presetText);
+        quickCmdDisplayField.setVisible(true);
+        quickCmdCommandField.setVisible(true);
+        quickCmdCommandField.setFocused(true);
+        setFocused(quickCmdCommandField);
+        if (quickCmdSuggestor != null) {
+            quickCmdSuggestor.setWindowActive(presetText.startsWith("/"));
+            quickCmdSuggestor.refresh();
+        }
+    }
+
     private void closeQuickCmdPanel() {
         quickCmdPanelOpen = false;
         quickCmdEditing = false;
@@ -2645,6 +2724,35 @@ public class ChatBubbleScreen extends Screen {
 
         input.setText("");
         scrollToBottom = true;
+    }
+
+    // 展示手持物品：用 tellraw 发送一条带 hover 物品的消息到公屏
+    private void sendItemShowcase() {
+        if (client.player == null) return;
+        var mainHand = client.player.getMainHandStack();
+        if (mainHand.isEmpty()) {
+            // 手中没有物品，简单提示
+            return;
+        }
+
+        // 1.21.11: 使用 OPTIONAL_CODEC 将 ItemStack 序列化为 NbtElement
+        var result = net.minecraft.item.ItemStack.OPTIONAL_CODEC.encodeStart(
+            net.minecraft.nbt.NbtOps.INSTANCE, mainHand);
+        var nbtOpt = result.result();
+        if (nbtOpt.isEmpty()) return;
+        String nbtJson = nbtOpt.get().toString();
+
+        String playerName = client.player.getName().getString();
+        String itemDisplay = mainHand.getName().getString();
+
+        com.google.gson.Gson gson = new com.google.gson.Gson();
+        String json = "[" +
+            "{\"text\":" + gson.toJson("[" + playerName + "] ") + ",\"color\":\"gray\"}," +
+            "{\"text\":" + gson.toJson("\u5c55\u793a\u4e86 ") + ",\"color\":\"gray\"}," +
+            "{\"text\":" + gson.toJson("[" + itemDisplay + "]") + ",\"color\":\"aqua\"," +
+            "\"hoverEvent\":{\"action\":\"show_item\",\"contents\":" + nbtJson + "}}" +
+            "]";
+        client.player.networkHandler.sendChatCommand("tellraw @a " + json);
     }
 
     private void moveInHistory(int delta) {

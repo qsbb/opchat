@@ -187,14 +187,11 @@ public class ChatMessageStore {
             ? MinecraftClient.getInstance().player.getName().getString() : "";
         boolean own = senderName != null && senderName.getString().equals(playerName);
 
-        if (ChatBubbleConfig.ANTI_SPAM && !messages.isEmpty()) {
+        // 合并连续相同消息（仅他人消息，自己发的不合并）
+        if (!own && !messages.isEmpty()) {
             ChatMessage last = messages.get(messages.size() - 1);
             if (!last.isSystem() && last.senderName().getString().equals(senderName.getString())
                 && last.content().getString().equals(content.getString())) {
-                if (own && pendingReplyContent != null) {
-                    pendingReplyContent = null;
-                    pendingReplySender = null;
-                }
                 messages.set(messages.size() - 1, new ChatMessage(
                     last.senderUUID(), last.senderName(), last.content(),
                     LocalTime.now(),
