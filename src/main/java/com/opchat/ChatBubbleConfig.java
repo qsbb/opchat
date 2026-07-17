@@ -272,7 +272,7 @@ public class ChatBubbleConfig {
         boolean system_chat_as_bubble = false;
         boolean anti_spam = false;
         boolean chat_report_compat = false;
-        boolean ime_blocker = false;
+        boolean ime_blocker = true;
         int whisper_history_days = 30;
         boolean preview_enabled = true;
         int preview_lines = 2;
