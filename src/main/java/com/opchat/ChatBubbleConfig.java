@@ -223,6 +223,7 @@ public class ChatBubbleConfig {
         data.system_chat_as_bubble = SYSTEM_CHAT_AS_BUBBLE;
         data.anti_spam = ANTI_SPAM;
         data.chat_report_compat = CHAT_REPORT_COMPAT;
+        data.ime_blocker = IME_BLOCKER_ENABLED;
         data.whisper_history_days = WHISPER_HISTORY_DAYS;
         data.preview_enabled = PREVIEW_ENABLED;
         data.preview_lines = PREVIEW_LINES;
