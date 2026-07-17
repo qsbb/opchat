@@ -14,7 +14,7 @@
   "opchat.config.system_chat_as_bubble": "Render System Chat as Bubble",
   "opchat.config.anti_spam": "Anti-Spam (merge consecutive dupes)",
   "opchat.config.chat_report_compat": "\"No Chat Reports\" Compat",
-  "opchat.config.ime_blocker": "IME Conflict Fix (disable IME in-game)",
+  "opchat.config.ime_blocker": "Disable IME In-Game",
   "opchat.config.preview_enabled": "Message Preview",
   "opchat.config.preview_lines": "Preview Lines",
   "opchat.config.preview_width": "Preview Width",

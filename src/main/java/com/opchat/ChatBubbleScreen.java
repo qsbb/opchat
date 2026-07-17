@@ -171,6 +171,8 @@ public class ChatBubbleScreen extends Screen {
     protected void init() {
         historyPos = client.inGameHud.getChatHud().getMessageHistory().size();
         ChatMessageStore.setScreenOpen(true);
+        // 进入聊天框：启用输入法
+        com.opchat.ime.IMEBlocker.enableIME();
         animStart = net.minecraft.util.Util.getMeasuringTimeMs();
         closing = false;
         contextMenuContact = null;
@@ -2668,7 +2670,7 @@ public class ChatBubbleScreen extends Screen {
 
     // 添加到发送历史，并对相同命令去重：仅保留每个命令最新发送的一条
     private void addToHistoryAndDeduplicate(String text) {
-        addToHistoryAndDeduplicate(text);
+        client.inGameHud.getChatHud().addToMessageHistory(text);
         var history = client.inGameHud.getChatHud().getMessageHistory();
         java.util.Set<String> seen = new java.util.HashSet<>();
         for (int i = history.size() - 1; i >= 0; i--) {
@@ -2688,6 +2690,8 @@ public class ChatBubbleScreen extends Screen {
         avatarSubMenuVisible = false;
         editingNickname = false;
         ChatBubbleConfig.save();
+        // 关闭聊天框：禁用输入法（回到游戏内）
+        com.opchat.ime.IMEBlocker.disableIME();
     }
 
     @Override
