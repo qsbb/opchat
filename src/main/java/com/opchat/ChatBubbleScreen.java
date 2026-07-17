@@ -124,7 +124,8 @@ public class ChatBubbleScreen extends Screen {
     private boolean quickPanelOpen;
     private TextFieldWidget quickEditField;
     private int quickIconX;
-    private int itemIconX; // 展示手持物品按钮位置
+    private int pasteIconX; // 输入框内右侧粘贴按钮位置
+    private static final int PASTE_ICON_S = 14;
     private static final int QUICK_PANEL_W = 180;
     private static final int QUICK_ITEM_H = 18;
     private static final int QUICK_EDIT_H = 22;
@@ -209,10 +210,11 @@ public class ChatBubbleScreen extends Screen {
         inputY = ibY;
         int sendX = panelX + panelW - PAD - ICON_S;
         quickIconX = sendX - ICON_S - 6;
-        itemIconX = quickIconX - ICON_S - 4; // 展示手持物品按钮
         slashIconX = panelX + PAD;
         int inputX = slashIconX + ICON_S + 4;
-        int inputW = itemIconX - 6 - inputX;
+        int inputW = quickIconX - 6 - inputX;
+        // 粘贴按钮覆盖在输入框内最右侧
+        pasteIconX = inputX + inputW - PASTE_ICON_S - 2;
 
         input = new TextFieldWidget(textRenderer, inputX, ibY, inputW, 20, Text.literal(""));
         input.setMaxLength(256);
@@ -510,8 +512,7 @@ public class ChatBubbleScreen extends Screen {
             boolean inPanel = b != null && mouseX >= b[0] && mouseX <= b[0] + b[2]
                 && mouseY >= b[1] && mouseY <= b[1] + b[3];
             int iconY = barTop + (BAR_H - ICON_S) / 2;
-            boolean onToggle = (mouseX >= quickIconX && mouseX <= quickIconX + ICON_S
-                || mouseX >= itemIconX && mouseX <= itemIconX + ICON_S)
+            boolean onToggle = mouseX >= quickIconX && mouseX <= quickIconX + ICON_S
                 && mouseY >= iconY && mouseY <= iconY + ICON_S;
             if (inPanel && button == 0) {
                 handleQuickPanelClick((int) mouseX, (int) mouseY);
@@ -529,8 +530,7 @@ public class ChatBubbleScreen extends Screen {
             boolean inPanel = b != null && mouseX >= b[0] && mouseX <= b[0] + b[2]
                 && mouseY >= b[1] && mouseY <= b[1] + b[3];
             int iconY = barTop + (BAR_H - ICON_S) / 2;
-            boolean onToggle = (mouseX >= slashIconX && mouseX <= slashIconX + ICON_S
-                || mouseX >= itemIconX && mouseX <= itemIconX + ICON_S)
+            boolean onToggle = mouseX >= slashIconX && mouseX <= slashIconX + ICON_S
                 && mouseY >= iconY && mouseY <= iconY + ICON_S;
             if (inPanel && button == 0) {
                 handleQuickCmdPanelClick((int) mouseX, (int) mouseY);
@@ -926,10 +926,22 @@ public class ChatBubbleScreen extends Screen {
             toggleQuickPanel();
             return true;
         }
-        if (mx >= itemIconX && mx <= itemIconX + ICON_S && my >= iconY && my <= iconY + ICON_S) {
-            if (quickPanelOpen) closeQuickPanel();
-            if (quickCmdPanelOpen) closeQuickCmdPanel();
-            sendItemShowcase();
+        // 粘贴按钮：点击将剪贴板内容插入到输入框光标位置
+        int pasteIconY = inputY + (20 - PASTE_ICON_S) / 2;
+        if (mx >= pasteIconX && mx <= pasteIconX + PASTE_ICON_S
+            && my >= pasteIconY && my <= pasteIconY + PASTE_ICON_S) {
+            String clip = client.keyboard.getClipboard();
+            if (clip != null && !clip.isEmpty()) {
+                String cur = input.getText();
+                int cursor = input.getCursor();
+                // 去掉换行，避免破坏单行输入框
+                String safe = clip.replace("\r", " ").replace("\n", " ");
+                String newText = cur.substring(0, cursor) + safe + cur.substring(cursor);
+                if (newText.length() <= 256) {
+                    input.setText(newText);
+                    input.setCursor(cursor + safe.length(), false);
+                }
+            }
             return true;
         }
         int sendX = panelX + panelW - PAD - ICON_S;
@@ -1932,7 +1944,7 @@ public class ChatBubbleScreen extends Screen {
         int sendX = panelX + panelW - PAD - ICON_S;
         int ibX = slashX + ICON_S + 4;
         int ibY = barTop + (BAR_H - 20) / 2;
-        int ibW = itemIconX - 6 - ibX;
+        int ibW = quickIconX - 6 - ibX;
         int ibH = 20;
         context.fill(ibX, ibY - 1, ibX + ibW, ibY, COLOR_DIVIDER);
         context.fill(ibX, ibY, ibX + ibW, ibY + ibH, colorInputBg);
@@ -1962,18 +1974,23 @@ public class ChatBubbleScreen extends Screen {
             context.fill(cx - 4, ly, cx + 4, ly + 1, quickColor);
         }
 
-        // 展示手持物品按钮（带背景）
-        boolean hoverItem = mouseX >= itemIconX && mouseX <= itemIconX + ICON_S
-            && mouseY >= iconY && mouseY <= iconY + ICON_S;
-        int itemBg = hoverItem ? 0xFF4A4A4A : 0xFF333333;
-        context.fill(itemIconX - 1, iconY - 1, itemIconX + ICON_S + 1, iconY + ICON_S + 1, itemBg);
-        int itemColor = hoverItem ? 0xFFFFFFFF : 0xFFCCCCCC;
-        String itemLabel = "\u7269";
-        int itemTextW = textRenderer.getWidth(itemLabel);
-        context.drawText(textRenderer, Text.literal(itemLabel),
-            itemIconX + (ICON_S - itemTextW) / 2,
-            iconY + (ICON_S - textRenderer.fontHeight) / 2,
-            itemColor, false);
+        // 输入框内右侧粘贴按钮
+        int pasteIconY = ibY + (ibH - PASTE_ICON_S) / 2;
+        boolean hoverPaste = mouseX >= pasteIconX && mouseX <= pasteIconX + PASTE_ICON_S
+            && mouseY >= pasteIconY && mouseY <= pasteIconY + PASTE_ICON_S;
+        int pasteBg = hoverPaste ? 0xFF4A4A4A : 0xFF2A2A2A;
+        context.fill(pasteIconX, pasteIconY, pasteIconX + PASTE_ICON_S, pasteIconY + PASTE_ICON_S, pasteBg);
+        // 简化的粘贴图标：剪贴板形状（矩形 + 顶部夹子）
+        int pColor = hoverPaste ? 0xFFFFFFFF : 0xFFAAAAAA;
+        // 顶部夹子
+        context.fill(pasteIconX + 4, pasteIconY + 2, pasteIconX + PASTE_ICON_S - 4, pasteIconY + 4, pColor);
+        // 主体边框
+        context.fill(pasteIconX + 3, pasteIconY + 4, pasteIconX + 4, pasteIconY + PASTE_ICON_S - 2, pColor);
+        context.fill(pasteIconX + PASTE_ICON_S - 4, pasteIconY + 4, pasteIconX + PASTE_ICON_S - 3, pasteIconY + PASTE_ICON_S - 2, pColor);
+        context.fill(pasteIconX + 3, pasteIconY + PASTE_ICON_S - 3, pasteIconX + PASTE_ICON_S - 3, pasteIconY + PASTE_ICON_S - 2, pColor);
+        // 中间横线
+        context.fill(pasteIconX + 5, pasteIconY + 7, pasteIconX + PASTE_ICON_S - 5, pasteIconY + 8, pColor);
+        context.fill(pasteIconX + 5, pasteIconY + 10, pasteIconX + PASTE_ICON_S - 5, pasteIconY + 11, pColor);
 
         // 发送按钮（带背景）
         boolean hoverSend = mouseX >= sendX && mouseX <= sendX + ICON_S
@@ -2860,86 +2877,6 @@ public class ChatBubbleScreen extends Screen {
 
         input.setText("");
         scrollToBottom = true;
-    }
-
-    // 展示手持物品
-    // 策略：
-    //   1. 单人游戏 → 用集成服务器的命令派发器执行 tellraw（带 hover 物品 tooltip）
-    //   2. 多人游戏 → 发送 [item] 占位符到聊天
-    //      （服务器若装了 Showcase / ChatItem / EssentialsX Chat 等插件会自动替换为
-    //       带 hover 的物品展示；否则其他玩家只看到 "[item]" 文本）
-    // 说明：1.19.1+ 协议禁止客户端发送带 hover_event 的富文本聊天消息，
-    //      这是 Minecraft 设计限制，不是 OP 权限问题。要支持多人 hover 必须服务器侧装 mod。
-    private void sendItemShowcase() {
-        if (client.player == null) return;
-        var mainHand = client.player.getMainHandStack();
-        if (mainHand.isEmpty()) {
-            return;
-        }
-
-        String playerName = client.player.getName().getString();
-        String itemDisplay = mainHand.getName().getString();
-
-        // 单人游戏：用 dispatcher 直接执行 tellraw（无长度/权限限制，带 hover）
-        if (client.isIntegratedServerRunning() && client.getServer() != null) {
-            try {
-                var stackNbt = encodeItemStackNbt(mainHand);
-                if (stackNbt != null) {
-                    String snbt = buildTellrawSnbt(playerName, itemDisplay, stackNbt);
-                    var server = client.getServer();
-                    var source = server.getCommandSource();
-                    var dispatcher = server.getCommandManager().getDispatcher();
-                    dispatcher.execute("tellraw @a " + snbt, source);
-                    return;
-                }
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-
-        // 多人游戏：发送 [item] 占位符
-        // 服务器装了 Showcase / ChatItem / EssentialsX Chat 等插件会自动替换为带 hover 的物品展示
-        // 如果服务器没有任何支持，玩家只会看到 "[item]" 文本（但仍知道你在展示物品）
-        client.player.networkHandler.sendChatMessage("[item]");
-    }
-
-    // 将 ItemStack 序列化为 NbtCompound（包含 id/count/components）
-    private net.minecraft.nbt.NbtCompound encodeItemStackNbt(net.minecraft.item.ItemStack stack) {
-        var result = net.minecraft.item.ItemStack.OPTIONAL_CODEC.encodeStart(
-            net.minecraft.nbt.NbtOps.INSTANCE, stack);
-        var opt = result.result();
-        if (opt.isEmpty() || !(opt.get() instanceof net.minecraft.nbt.NbtCompound nbt)) return null;
-        return nbt;
-    }
-
-    // 构建 tellraw 消息的 SNBT（本地执行版本，用于 dispatcher）
-    private String buildTellrawSnbt(String playerName, String itemDisplay, net.minecraft.nbt.NbtCompound stackNbt) {
-        net.minecraft.nbt.NbtList root = new net.minecraft.nbt.NbtList();
-
-        net.minecraft.nbt.NbtCompound part1 = new net.minecraft.nbt.NbtCompound();
-        part1.putString("text", "[" + playerName + "] ");
-        part1.putString("color", "gray");
-        root.add(part1);
-
-        net.minecraft.nbt.NbtCompound part2 = new net.minecraft.nbt.NbtCompound();
-        part2.putString("text", "\u5c55\u793a\u4e86 ");
-        part2.putString("color", "gray");
-        root.add(part2);
-
-        net.minecraft.nbt.NbtCompound part3 = new net.minecraft.nbt.NbtCompound();
-        part3.putString("text", "[" + itemDisplay + "]");
-        part3.putString("color", "aqua");
-
-        net.minecraft.nbt.NbtCompound hoverEvent = new net.minecraft.nbt.NbtCompound();
-        hoverEvent.putString("action", "show_item");
-        for (String key : stackNbt.getKeys()) {
-            var el = stackNbt.get(key);
-            if (el != null) hoverEvent.put(key, el);
-        }
-        part3.put("hover_event", hoverEvent);
-        root.add(part3);
-
-        return root.toString();
     }
 
     private void moveInHistory(int delta) {
