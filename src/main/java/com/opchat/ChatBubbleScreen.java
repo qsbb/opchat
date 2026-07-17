@@ -2862,8 +2862,14 @@ public class ChatBubbleScreen extends Screen {
         scrollToBottom = true;
     }
 
-    // 展示手持物品：用 tellraw 发送一条带 hover 物品的消息到公屏
-    // 1.21.5+ 文本组件改用 SNBT 格式，hover_event 字段内联（不再嵌套 contents）
+    // 展示手持物品
+    // 策略：
+    //   1. 单人游戏 → 用集成服务器的命令派发器执行 tellraw（带 hover 物品 tooltip）
+    //   2. 多人游戏 → 发送 [item] 占位符到聊天
+    //      （服务器若装了 Showcase / ChatItem / EssentialsX Chat 等插件会自动替换为
+    //       带 hover 的物品展示；否则其他玩家只看到 "[item]" 文本）
+    // 说明：1.19.1+ 协议禁止客户端发送带 hover_event 的富文本聊天消息，
+    //      这是 Minecraft 设计限制，不是 OP 权限问题。要支持多人 hover 必须服务器侧装 mod。
     private void sendItemShowcase() {
         if (client.player == null) return;
         var mainHand = client.player.getMainHandStack();
@@ -2871,16 +2877,43 @@ public class ChatBubbleScreen extends Screen {
             return;
         }
 
-        // 1.21.11: 使用 OPTIONAL_CODEC 将 ItemStack 序列化为 NbtCompound
-        var result = net.minecraft.item.ItemStack.OPTIONAL_CODEC.encodeStart(
-            net.minecraft.nbt.NbtOps.INSTANCE, mainHand);
-        var nbtOpt = result.result();
-        if (nbtOpt.isEmpty() || !(nbtOpt.get() instanceof net.minecraft.nbt.NbtCompound stackNbt)) return;
-
         String playerName = client.player.getName().getString();
         String itemDisplay = mainHand.getName().getString();
 
-        // 构建完整的 tellraw 消息 SNBT
+        // 单人游戏：用 dispatcher 直接执行 tellraw（无长度/权限限制，带 hover）
+        if (client.isIntegratedServerRunning() && client.getServer() != null) {
+            try {
+                var stackNbt = encodeItemStackNbt(mainHand);
+                if (stackNbt != null) {
+                    String snbt = buildTellrawSnbt(playerName, itemDisplay, stackNbt);
+                    var server = client.getServer();
+                    var source = server.getCommandSource();
+                    var dispatcher = server.getCommandManager().getDispatcher();
+                    dispatcher.execute("tellraw @a " + snbt, source);
+                    return;
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }
+
+        // 多人游戏：发送 [item] 占位符
+        // 服务器装了 Showcase / ChatItem / EssentialsX Chat 等插件会自动替换为带 hover 的物品展示
+        // 如果服务器没有任何支持，玩家只会看到 "[item]" 文本（但仍知道你在展示物品）
+        client.player.networkHandler.sendChatMessage("[item]");
+    }
+
+    // 将 ItemStack 序列化为 NbtCompound（包含 id/count/components）
+    private net.minecraft.nbt.NbtCompound encodeItemStackNbt(net.minecraft.item.ItemStack stack) {
+        var result = net.minecraft.item.ItemStack.OPTIONAL_CODEC.encodeStart(
+            net.minecraft.nbt.NbtOps.INSTANCE, stack);
+        var opt = result.result();
+        if (opt.isEmpty() || !(opt.get() instanceof net.minecraft.nbt.NbtCompound nbt)) return null;
+        return nbt;
+    }
+
+    // 构建 tellraw 消息的 SNBT（本地执行版本，用于 dispatcher）
+    private String buildTellrawSnbt(String playerName, String itemDisplay, net.minecraft.nbt.NbtCompound stackNbt) {
         net.minecraft.nbt.NbtList root = new net.minecraft.nbt.NbtList();
 
         net.minecraft.nbt.NbtCompound part1 = new net.minecraft.nbt.NbtCompound();
@@ -2897,7 +2930,6 @@ public class ChatBubbleScreen extends Screen {
         part3.putString("text", "[" + itemDisplay + "]");
         part3.putString("color", "aqua");
 
-        // hover_event: action + 物品的 id/count/components 字段内联
         net.minecraft.nbt.NbtCompound hoverEvent = new net.minecraft.nbt.NbtCompound();
         hoverEvent.putString("action", "show_item");
         for (String key : stackNbt.getKeys()) {
@@ -2907,28 +2939,7 @@ public class ChatBubbleScreen extends Screen {
         part3.put("hover_event", hoverEvent);
         root.add(part3);
 
-        String snbt = root.toString();
-        String fullCmd = "tellraw @a " + snbt;
-
-        // 优先使用集成服务器直接执行（单人游戏，无长度/权限限制）
-        boolean executed = false;
-        if (client.isIntegratedServerRunning() && client.getServer() != null) {
-            try {
-                var server = client.getServer();
-                var source = server.getCommandSource();
-                var dispatcher = server.getCommandManager().getDispatcher();
-                dispatcher.execute(fullCmd, source);
-                executed = true;
-            } catch (Exception e) {
-                e.printStackTrace();
-            }
-        }
-
-        if (!executed) {
-            // 多人游戏：通过聊天命令发送（需要 OP 权限）
-            // 如果命令太长，会失败；这是协议限制
-            client.player.networkHandler.sendChatCommand(fullCmd);
-        }
+        return root.toString();
     }
 
     private void moveInHistory(int delta) {
