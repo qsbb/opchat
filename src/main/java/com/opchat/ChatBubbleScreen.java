@@ -2613,9 +2613,15 @@ public class ChatBubbleScreen extends Screen {
 
         int varBtnX = cmdFieldX + cmdFieldW + 4;
         if (mx >= varBtnX && mx <= varBtnX + varBtnW && my >= cmdFieldY && my <= cmdFieldY + cmdFieldH) {
+            // 在光标处插入 @*，智能补全前后空格
             String cur = quickCmdCommandField.getText();
-            quickCmdCommandField.setText(cur + "@*");
-            quickCmdCommandField.setCursorToEnd(false);
+            int cursor = quickCmdCommandField.getCursor();
+            boolean needLeadingSpace = cursor > 0 && cur.charAt(cursor - 1) != ' ';
+            boolean needTrailingSpace = cursor < cur.length() && cur.charAt(cursor) != ' ';
+            String insert = (needLeadingSpace ? " " : "") + "@*" + (needTrailingSpace ? " " : "");
+            String newText = cur.substring(0, cursor) + insert + cur.substring(cursor);
+            quickCmdCommandField.setText(newText);
+            quickCmdCommandField.setCursor(cursor + insert.length(), false);
             quickCmdCommandField.setFocused(true);
             setFocused(quickCmdCommandField);
             return;
