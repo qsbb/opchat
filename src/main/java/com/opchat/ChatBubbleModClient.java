@@ -31,8 +31,7 @@ public class ChatBubbleModClient implements ClientModInitializer {
         // Intercept vanilla ChatScreen opening
         ScreenEvents.AFTER_INIT.register((client, screen, scaledWidth, scaledHeight) -> {
             if (!ChatBubbleConfig.ENABLED) return;
-            // 进入任意屏幕：启用输入法
-            handleIMEForScreen(screen);
+            // IME 状态由 TextFieldWidget 焦点 Mixin 精确控制，此处不再对所有屏幕启用
             if (screen instanceof ChatScreen chatScreen) {
                 ChatScreenAccessor accessor = (ChatScreenAccessor) chatScreen;
                 String initialText = accessor.opchat$getOriginalChatText();
