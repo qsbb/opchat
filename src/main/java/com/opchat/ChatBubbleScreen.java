@@ -36,16 +36,16 @@ public class ChatBubbleScreen extends Screen {
 
     // Layout
     int panelX, panelW;
-    private static final int TITLE_H = 24;
+    static final int TITLE_H = 24;
     int titleY, msgTop, msgBottom, barTop;
-    private static final int PAD = 10;
-    private static final int AVATAR = 24;
-    private static final int BUBBLE_PAD_X = 8;
-    private static final int BUBBLE_PAD_Y = 5;
-    private static final int GAP = 6;
-    private static final int NAME_H = 10;
-    private static final int TIME_SEP_H = 14;
-    private static final int BAR_H = 38;
+    static final int PAD = 10;
+    static final int AVATAR = 24;
+    static final int BUBBLE_PAD_X = 8;
+    static final int BUBBLE_PAD_Y = 5;
+    static final int GAP = 6;
+    static final int NAME_H = 10;
+    static final int TIME_SEP_H = 14;
+    static final int BAR_H = 38;
 
     // Sidebar (contacts)
     private static final int SIDEBAR_W = 90;
@@ -57,17 +57,17 @@ public class ChatBubbleScreen extends Screen {
     private static final Identifier TEX_SEND = Identifier.of("opchat", "textures/gui/send");
     private static boolean iconsLoaded;
 
-    private static final int COLOR_NAME = 0xFFCCCCCC;
-    private static final int COLOR_TIME = 0xFF999999;
-    private static final int COLOR_DIVIDER = 0xFF333333;
+    static final int COLOR_NAME = 0xFFCCCCCC;
+    static final int COLOR_TIME = 0xFF999999;
+    static final int COLOR_DIVIDER = 0xFF333333;
     private int colorPanelBg;
     private int colorTitleBg;
     private int colorBarBg;
     private int colorInputBg;
     private int colorSidebarBg;
-    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
-    private static final DateTimeFormatter DATE_TIME_FMT = DateTimeFormatter.ofPattern("MM-dd HH:mm");
-    private static final DateTimeFormatter DATE_TIME_KEY_FMT = DateTimeFormatter.ofPattern("yyyyMMddHH:mm");
+    static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
+    static final DateTimeFormatter DATE_TIME_FMT = DateTimeFormatter.ofPattern("MM-dd HH:mm");
+    static final DateTimeFormatter DATE_TIME_KEY_FMT = DateTimeFormatter.ofPattern("yyyyMMddHH:mm");
 
     private TextFieldWidget input;
     private ChatInputSuggestor commandSuggestions;
@@ -91,11 +91,8 @@ public class ChatBubbleScreen extends Screen {
     private static final int CTX_W = 110;
     private static final int CTX_ITEM_H = 18;
 
-    // Bubble hit tracking
-    private final List<int[]> bubbleRects = new ArrayList<>();
-
-    // Clickable text span tracking
-    private final List<ClickableSpan> clickableSpans = new ArrayList<>();
+    // Bubble renderer (extracted from ChatBubbleScreen)
+    private BubbleRenderer bubbleRenderer;
 
     // Reply / quote
     private int replyTargetIndex = -1;
@@ -202,6 +199,8 @@ public class ChatBubbleScreen extends Screen {
         colorBarBg = (a << 24) | 0x242424;
         colorInputBg = (a << 24) | 0x2A2A2A;
         colorSidebarBg = (a << 24) | 0x161616;
+
+        bubbleRenderer = new BubbleRenderer(this, textRenderer);
 
         panelW = Math.max(200, (int) (width * 0.4));
         panelX = SIDEBAR_W;
@@ -787,7 +786,7 @@ public class ChatBubbleScreen extends Screen {
         }
 
         if (button == 0) {
-            for (int[] r : bubbleRects) {
+            for (int[] r : bubbleRenderer.getBubbleRects()) {
                 ChatMessageStore.ChatMessage msg = getMessageAt(r[4]);
                 if (msg == null || msg.isSystem()) continue;
                 int avatarX = r[0] - AVATAR - 4;
@@ -803,7 +802,7 @@ public class ChatBubbleScreen extends Screen {
         }
 
         if (button == 1) {
-            for (int[] r : bubbleRects) {
+            for (int[] r : bubbleRenderer.getBubbleRects()) {
                 int avatarX = r[0] - AVATAR - 4;
                 int avatarY = r[1] - 6;
                 if (mouseX >= avatarX && mouseX <= avatarX + AVATAR
@@ -823,7 +822,7 @@ public class ChatBubbleScreen extends Screen {
                     return true;
                 }
             }
-            for (int[] r : bubbleRects) {
+            for (int[] r : bubbleRenderer.getBubbleRects()) {
                 if (mouseX >= r[0] && mouseX <= r[0] + r[2]
                     && mouseY >= r[1] && mouseY <= r[1] + r[3]) {
                     contextMsgIndex = r[4];
@@ -834,7 +833,7 @@ public class ChatBubbleScreen extends Screen {
             }
         }
         if (button == 0) {
-            Style style = getHoveredStyle(mouseX, mouseY);
+            Style style = bubbleRenderer.getHoveredStyle(mouseX, mouseY);
             if (style != null && style.getClickEvent() != null) {
                 ClickEvent clickEvent = style.getClickEvent();
                 if (clickEvent instanceof ClickEvent.SuggestCommand sc) {
@@ -844,8 +843,7 @@ public class ChatBubbleScreen extends Screen {
                 Screen.handleClickEvent(clickEvent, client, this);
                 return true;
             }
-            // 气泡左键单击：复制消息内容到剪贴板
-            for (int[] r : bubbleRects) {
+            for (int[] r : bubbleRenderer.getBubbleRects()) {
                 if (mouseX >= r[0] && mouseX <= r[0] + r[2]
                     && mouseY >= r[1] && mouseY <= r[1] + r[3]) {
                     ChatMessageStore.ChatMessage msg = getMessageAt(r[4]);
@@ -1020,7 +1018,7 @@ public class ChatBubbleScreen extends Screen {
         renderSidebar(context, mouseX, mouseY);
         renderTitleBar(context, mouseX, mouseY);
         renderMessages(context, mouseX, mouseY);
-        Style hovered = getHoveredStyle(mouseX, mouseY);
+        Style hovered = bubbleRenderer.getHoveredStyle(mouseX, mouseY);
         if (hovered != null && hovered.getHoverEvent() != null) {
             // Hover event rendering would go here
         }
@@ -1408,8 +1406,7 @@ public class ChatBubbleScreen extends Screen {
     }
 
     private void renderMessages(DrawContext context, int mouseX, int mouseY) {
-        bubbleRects.clear();
-        clickableSpans.clear();
+        bubbleRenderer.clear();
         List<ChatMessageStore.ChatMessage> messages = getCurrentMessages();
         if (messages.isEmpty()) return;
 
@@ -1425,7 +1422,7 @@ public class ChatBubbleScreen extends Screen {
         int effectiveMsgBottom = newMessageCount > 0 ? barTop - NOTIF_H - 1 : msgBottom;
         int areaH = effectiveMsgBottom - msgTop;
         int totalH = 0;
-        for (var msg : messages) totalH += getMsgHeight(msg) + GAP;
+        for (var msg : messages) totalH += bubbleRenderer.getMsgHeight(msg) + GAP;
         totalH += timeSeps * (TIME_SEP_H + GAP);
         int prevMaxScroll = maxScroll;
         maxScroll = Math.max(0, totalH - areaH);
@@ -1476,183 +1473,19 @@ public class ChatBubbleScreen extends Screen {
                     lastKey = key;
                     int ssy = msgTop + contentY - scrollOffset;
                     if (ssy + TIME_SEP_H > msgTop && ssy < msgBottom)
-                        renderTimeSeparator(context, msg.dateTime(), ssy);
+                        bubbleRenderer.renderTimeSeparator(context, msg.dateTime(), ssy);
                     contentY += TIME_SEP_H + GAP;
                 }
             }
 
-            int h = getMsgHeight(msg);
+            int h = bubbleRenderer.getMsgHeight(msg);
             int screenY = msgTop + contentY - scrollOffset;
             contentY += h + GAP;
 
             if (screenY + h <= msgTop || screenY >= effectiveMsgBottom) continue;
-            renderBubble(context, msg, i, screenY, mouseX, mouseY);
+            bubbleRenderer.renderBubble(context, msg, i, screenY, mouseX, mouseY);
         }
         context.disableScissor();
-    }
-
-    private void renderTimeSeparator(DrawContext context, LocalDateTime dateTime, int y) {
-        LocalDate today = java.time.LocalDate.now();
-        String text = dateTime.toLocalDate().equals(today)
-            ? dateTime.format(TIME_FMT)
-            : dateTime.format(DATE_TIME_FMT);
-        int tw = textRenderer.getWidth(text);
-        int tx = panelX + (panelW - tw) / 2;
-        context.fill(tx - 6, y + 2, tx + tw + 6, y + TIME_SEP_H - 2, 0x44000000);
-        context.drawText(textRenderer, Text.literal(text), tx, y + 3, 0xFF999999, false);
-    }
-
-    private int getMsgHeight(ChatMessageStore.ChatMessage msg) {
-        if (msg.isSystem()) {
-            List<OrderedText> lines = textRenderer.wrapLines(msg.content(), panelW - PAD * 2 - 20);
-            return lines.size() * textRenderer.fontHeight + 4;
-        }
-        int bubbleMaxW = panelW - AVATAR - PAD * 2 - BUBBLE_PAD_X * 2 - 16;
-        List<OrderedText> lines = textRenderer.wrapLines(msg.content(), bubbleMaxW);
-        int h = lines.size() * textRenderer.fontHeight + BUBBLE_PAD_Y * 2 + NAME_H;
-        if (msg.replyContent() != null) h += textRenderer.fontHeight + 2;
-        return h;
-    }
-
-    private void renderBubble(DrawContext context, ChatMessageStore.ChatMessage msg,
-                               int index, int baseY, int mouseX, int mouseY) {
-        if (msg.isSystem()) {
-            List<OrderedText> lines = textRenderer.wrapLines(msg.content(), panelW - PAD * 2 - 20);
-            int yy = baseY + 2;
-            for (var line : lines) {
-                int lw = textRenderer.getWidth(line);
-                renderLineWithClicks(context, line, panelX + (panelW - lw) / 2, yy, 0xFF888888);
-                yy += textRenderer.fontHeight;
-            }
-            return;
-        }
-
-        boolean own = msg.isOwn();
-        int bubbleMaxW = panelW - AVATAR - PAD * 2 - BUBBLE_PAD_X * 2 - 16;
-        List<OrderedText> lines = textRenderer.wrapLines(msg.content(), bubbleMaxW);
-
-        int textW = 0;
-        for (var line : lines) textW = Math.max(textW, textRenderer.getWidth(line));
-        int bubbleW = Math.max(textW + BUBBLE_PAD_X * 2, 36);
-        int bubbleH = lines.size() * textRenderer.fontHeight + BUBBLE_PAD_Y * 2;
-
-        int avatarX, bubbleX;
-        if (own) {
-            avatarX = panelX + panelW - PAD - AVATAR;
-            bubbleX = avatarX - 4 - bubbleW;
-        } else {
-            avatarX = panelX + PAD;
-            bubbleX = avatarX + AVATAR + 4;
-        }
-
-        int nameY = baseY;
-
-        if (!msg.senderName().getString().isEmpty()) {
-            int maxNameW = panelW - AVATAR - PAD * 2 - 20;
-            String rawName = msg.senderName().getString();
-            Text displayName;
-            if (!own) {
-                String nick = WhisperHistory.getNickname(rawName);
-                displayName = (nick != null && !nick.isEmpty()) ? Text.literal(nick) : msg.senderName();
-            } else {
-                displayName = msg.senderName();
-            }
-            if (textRenderer.getWidth(displayName) > maxNameW)
-                displayName = Text.literal(textRenderer.trimToWidth(displayName.getString(), maxNameW - textRenderer.getWidth("...")) + "...");
-            int nameW = textRenderer.getWidth(displayName);
-            int startX = own ? (bubbleX + bubbleW - nameW) : bubbleX;
-            context.drawText(textRenderer, displayName, startX, nameY, COLOR_NAME, false);
-        }
-
-        int bubbleY = baseY + NAME_H;
-        int avatarY = bubbleY - 6;
-
-        int bg = own
-            ? ChatBubbleConfig.parseHexColor(ChatBubbleConfig.OWN_BUBBLE_COLOR, 0xFF95EC69)
-            : ChatBubbleConfig.parseHexColor(ChatBubbleConfig.OTHER_BUBBLE_COLOR, 0xFF4A4A4A);
-        int fg = own
-            ? ChatBubbleConfig.parseHexColor(ChatBubbleConfig.OWN_TEXT_COLOR, 0xFF0A0A0A)
-            : ChatBubbleConfig.parseHexColor(ChatBubbleConfig.OTHER_TEXT_COLOR, 0xFFFFFFFF);
-
-        context.fill(bubbleX, bubbleY, bubbleX + bubbleW, bubbleY + bubbleH, bg);
-
-        for (int li = 0; li < lines.size(); li++)
-            renderLineWithClicks(context, lines.get(li), bubbleX + BUBBLE_PAD_X,
-                bubbleY + BUBBLE_PAD_Y + li * textRenderer.fontHeight, fg);
-
-        // Reply preview (below the bubble)
-        if (msg.replyContent() != null) {
-            int replyY = bubbleY + bubbleH + 2;
-            int replyH = textRenderer.fontHeight;
-            int replyMaxW = bubbleMaxW;
-            String replyText = msg.replySender() + ": " + msg.replyContent();
-            String replyDisplay = textRenderer.trimToWidth(replyText, replyMaxW - textRenderer.getWidth("..."));
-            if (!replyDisplay.equals(replyText)) replyDisplay += "...";
-            int replyDisplayW = textRenderer.getWidth(replyDisplay);
-            int replyBarX = own ? (bubbleX + bubbleW - replyDisplayW) : bubbleX;
-            int accentColor = own
-                ? ChatBubbleConfig.parseHexColor(ChatBubbleConfig.OWN_TEXT_COLOR, 0xFF0A0A0A)
-                : ChatBubbleConfig.parseHexColor(ChatBubbleConfig.OTHER_TEXT_COLOR, 0xFFFFFFFF);
-            context.fill(replyBarX, replyY, replyBarX + 2, replyY + replyH, accentColor);
-            context.drawText(textRenderer, Text.literal(replyDisplay), replyBarX + 6, replyY + 1, 0xFF999999, false);
-        }
-
-        // Draw player skin
-        AvatarHelper.renderSkin(context, msg.senderUUID(), avatarX, avatarY);
-
-        if (msg.duplicateCount() > 1) {
-            String label = "x" + msg.duplicateCount();
-            int labelW = textRenderer.getWidth(label);
-            // 显示在气泡右下角内侧，字体很小
-            int labelX = bubbleX + bubbleW - labelW - 3;
-            int labelY = bubbleY + bubbleH - textRenderer.fontHeight / 2 - 1;
-            context.drawText(textRenderer, Text.literal(label), labelX, labelY, 0x99AAAAAA, false);
-        }
-
-        bubbleRects.add(new int[]{bubbleX, bubbleY, bubbleW, bubbleH, index});
-    }
-
-    private void renderLineWithClicks(DrawContext context, OrderedText line,
-                                       int x, int y, int color) {
-        context.drawText(textRenderer, line, x, y, color, false);
-
-        final int[] pos = {0};
-        final int[] spanStart = {-1};
-        final Style[] spanStyle = {null};
-
-        line.accept((index, style, codePoint) -> {
-            int charW = textRenderer.getWidth(String.valueOf((char) codePoint));
-            if (style.getClickEvent() != null) {
-                if (spanStart[0] < 0) {
-                    spanStart[0] = pos[0]; spanStyle[0] = style;
-                } else if (!style.equals(spanStyle[0])) {
-                    clickableSpans.add(new ClickableSpan(x + spanStart[0], y,
-                        pos[0] - spanStart[0], textRenderer.fontHeight, spanStyle[0]));
-                    spanStart[0] = pos[0]; spanStyle[0] = style;
-                }
-            } else {
-                if (spanStart[0] >= 0) {
-                    clickableSpans.add(new ClickableSpan(x + spanStart[0], y,
-                        pos[0] - spanStart[0], textRenderer.fontHeight, spanStyle[0]));
-                    spanStart[0] = -1; spanStyle[0] = null;
-                }
-            }
-            pos[0] += charW;
-            return true;
-        });
-        if (spanStart[0] >= 0) {
-            clickableSpans.add(new ClickableSpan(x + spanStart[0], y,
-                pos[0] - spanStart[0], textRenderer.fontHeight, spanStyle[0]));
-        }
-    }
-
-    private Style getHoveredStyle(double mouseX, double mouseY) {
-        for (ClickableSpan s : clickableSpans) {
-            if (mouseX >= s.x && mouseX <= s.x + s.w
-                && mouseY >= s.y && mouseY <= s.y + s.h)
-                return s.style;
-        }
-        return null;
     }
 
     private void renderNotificationBar(DrawContext context, int mouseX, int mouseY) {
@@ -2848,7 +2681,7 @@ public class ChatBubbleScreen extends Screen {
                     cy += TIME_SEP_H + GAP;
                 }
             }
-            cy += getMsgHeight(m) + GAP;
+            cy += bubbleRenderer.getMsgHeight(m) + GAP;
         }
         scrollOffset = Math.max(0, cy - 20);
         newMessageCount = 0;
@@ -2977,7 +2810,7 @@ public class ChatBubbleScreen extends Screen {
     @Override
     public boolean shouldPause() { return false; }
 
-    private static class ClickableSpan {
+    static class ClickableSpan {
         final int x, y, w, h;
         final Style style;
         ClickableSpan(int x, int y, int w, int h, Style style) {
