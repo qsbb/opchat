@@ -368,6 +368,19 @@ public class ChatBubbleScreen extends Screen {
         }
     }
 
+    // ===== 包级可见访问器（为未来拆分为多个类做准备） =====
+    int getPanelX() { return panelX; }
+    int getPanelW() { return panelW; }
+    int getBarTop() { return barTop; }
+    int getMsgTop() { return msgTop; }
+    int getMsgBottom() { return msgBottom; }
+    TextFieldWidget getInput() { return input; }
+    String getSelectedContact() { return selectedContact; }
+    int getQuickIconX() { return quickIconX; }
+    int getSlashIconX() { return slashIconX; }
+    boolean isQuickPanelOpen() { return quickPanelOpen; }
+    boolean isQuickCmdPanelOpen() { return quickCmdPanelOpen; }
+
     @Override
     public void tick() {
         if (copyToastTicks > 0) copyToastTicks--;
@@ -1388,7 +1401,6 @@ public class ChatBubbleScreen extends Screen {
             ? WhisperHistory.getAsChatMessages(selectedContact)
             : ChatMessageStore.getMessages();
     }
-
     private ChatMessageStore.ChatMessage getMessageAt(int index) {
         java.util.List<ChatMessageStore.ChatMessage> msgs = getCurrentMessages();
         if (index >= 0 && index < msgs.size()) return msgs.get(index);
@@ -2751,8 +2763,10 @@ public class ChatBubbleScreen extends Screen {
             setFocused(input);
             input.setCursorToEnd(false);
             if (command.startsWith("/")) {
-                commandSuggestions.setWindowActive(true);
-                commandSuggestions.refresh();
+                if (commandSuggestions != null) {
+                    commandSuggestions.setWindowActive(true);
+                    commandSuggestions.refresh();
+                }
             }
             return;
         }
