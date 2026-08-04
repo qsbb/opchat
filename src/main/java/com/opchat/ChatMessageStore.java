@@ -12,7 +12,9 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.LocalDate;
 import java.time.LocalDateTime;
+import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
@@ -428,13 +430,20 @@ public class ChatMessageStore {
         messages.clear();
         for (PersistedMessage item : saved) {
             try {
+                LocalDateTime dateTime;
+                try {
+                    dateTime = LocalDateTime.parse(item.dateTime(), DATE_TIME_FMT);
+                } catch (Exception e) {
+                    // 兼容旧格式（只有 HH:mm，假设为今天）
+                    dateTime = LocalDateTime.of(java.time.LocalDate.now(), LocalTime.parse(item.dateTime(), TIME_FMT));
+                }
                 String identity = item.dateTime() + "\u0000" + item.senderName() + "\u0000" + item.content();
                 if (existing.contains(identity)) continue;
                 messages.add(new ChatMessage(
                     UUID.fromString(item.senderUUID()),
                     Text.literal(item.senderName()),
                     Text.literal(item.content()),
-                    LocalDateTime.parse(item.dateTime(), DATE_TIME_FMT),
+                    dateTime,
                     item.isOwn(), item.isSystem(),
                     item.replyContent(), item.replySender(), item.messageHash(),
                     Math.max(1, item.duplicateCount())
