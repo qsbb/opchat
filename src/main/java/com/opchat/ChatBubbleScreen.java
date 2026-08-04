@@ -35,9 +35,9 @@ import java.util.UUID;
 public class ChatBubbleScreen extends Screen {
 
     // Layout
-    private int panelX, panelW;
+    int panelX, panelW;
     private static final int TITLE_H = 24;
-    private int titleY, msgTop, msgBottom, barTop;
+    int titleY, msgTop, msgBottom, barTop;
     private static final int PAD = 10;
     private static final int AVATAR = 24;
     private static final int BUBBLE_PAD_X = 8;
@@ -592,7 +592,7 @@ public class ChatBubbleScreen extends Screen {
                     contextMenuContact = null;
                 } else if (item == 1) {
                     WhisperHistory.setHidden(contextMenuContact, !WhisperHistory.isHidden(contextMenuContact));
-                    if (contextMenuContact.equals(selectedContact)) {
+                    if (contextMenuContact.equals(selectedContact != null ? selectedContact : "")) {
                         selectedContact = null;
                         resetViewState();
                     }
