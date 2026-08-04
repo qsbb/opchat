@@ -23,6 +23,8 @@ import net.minecraft.world.GameMode;
 import com.opchat.packets.QuoteSyncPacket;
 
 import java.io.InputStream;
+import java.time.LocalDate;
+import java.time.LocalDateTime;
 import java.time.LocalTime;
 import java.time.format.DateTimeFormatter;
 import java.util.ArrayList;
@@ -64,6 +66,8 @@ public class ChatBubbleScreen extends Screen {
     private int colorInputBg;
     private int colorSidebarBg;
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
+    private static final DateTimeFormatter DATE_TIME_FMT = DateTimeFormatter.ofPattern("MM-dd HH:mm");
+    private static final DateTimeFormatter DATE_TIME_KEY_FMT = DateTimeFormatter.ofPattern("yyyyMMddHH:mm");
 
     private TextFieldWidget input;
     private ChatInputSuggestor commandSuggestions;
@@ -1401,7 +1405,7 @@ public class ChatBubbleScreen extends Screen {
         String lastKey = null;
         for (var msg : messages) {
             if (!msg.isSystem()) {
-                String key = msg.time().format(TIME_FMT);
+                String key = msg.dateTime().format(DATE_TIME_KEY_FMT);
                 if (lastKey == null || !key.equals(lastKey)) { timeSeps++; lastKey = key; }
             }
         }
@@ -1455,12 +1459,12 @@ public class ChatBubbleScreen extends Screen {
             var msg = messages.get(i);
 
             if (!msg.isSystem()) {
-                String key = msg.time().format(TIME_FMT);
+                String key = msg.dateTime().format(DATE_TIME_KEY_FMT);
                 if (lastKey == null || !key.equals(lastKey)) {
                     lastKey = key;
                     int ssy = msgTop + contentY - scrollOffset;
                     if (ssy + TIME_SEP_H > msgTop && ssy < msgBottom)
-                        renderTimeSeparator(context, msg.time(), ssy);
+                        renderTimeSeparator(context, msg.dateTime(), ssy);
                     contentY += TIME_SEP_H + GAP;
                 }
             }
@@ -1475,8 +1479,11 @@ public class ChatBubbleScreen extends Screen {
         context.disableScissor();
     }
 
-    private void renderTimeSeparator(DrawContext context, LocalTime time, int y) {
-        String text = time.format(TIME_FMT);
+    private void renderTimeSeparator(DrawContext context, LocalDateTime dateTime, int y) {
+        LocalDate today = java.time.LocalDate.now();
+        String text = dateTime.toLocalDate().equals(today)
+            ? dateTime.format(TIME_FMT)
+            : dateTime.format(DATE_TIME_FMT);
         int tw = textRenderer.getWidth(text);
         int tx = panelX + (panelW - tw) / 2;
         context.fill(tx - 6, y + 2, tx + tw + 6, y + TIME_SEP_H - 2, 0x44000000);
@@ -2821,7 +2828,7 @@ public class ChatBubbleScreen extends Screen {
         for (int i = 0; i < msgIndex && i < msgs.size(); i++) {
             var m = msgs.get(i);
             if (!m.isSystem()) {
-                String k = m.time().format(TIME_FMT);
+                String k = m.dateTime().format(DATE_TIME_KEY_FMT);
                 if (lk == null || !k.equals(lk)) {
                     lk = k;
                     cy += TIME_SEP_H + GAP;

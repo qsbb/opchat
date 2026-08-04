@@ -9,12 +9,13 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalTime;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
 public class WhisperHistory {
     private static final int MAX_PER_CONTACT = 100;
+    private static final DateTimeFormatter DATE_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
     private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
     private static final Gson GSON = new Gson();
 
@@ -26,12 +27,12 @@ public class WhisperHistory {
     private static boolean loaded = false;
     private static boolean metaLoaded = false;
 
-    public record WhisperEntry(boolean outgoing, String content, String time, boolean system, Long timestamp) {
-        public WhisperEntry(boolean outgoing, String content, String time) {
-            this(outgoing, content, time, false, System.currentTimeMillis());
+    public record WhisperEntry(boolean outgoing, String content, String dateTime, boolean system, Long timestamp) {
+        public WhisperEntry(boolean outgoing, String content, String dateTime) {
+            this(outgoing, content, dateTime, false, System.currentTimeMillis());
         }
-        public WhisperEntry(boolean outgoing, String content, String time, boolean system) {
-            this(outgoing, content, time, system, System.currentTimeMillis());
+        public WhisperEntry(boolean outgoing, String content, String dateTime, boolean system) {
+            this(outgoing, content, dateTime, system, System.currentTimeMillis());
         }
     }
 
@@ -56,7 +57,7 @@ public class WhisperHistory {
             List<WhisperEntry> la = history.get(a), lb = history.get(b);
             if (la == null || la.isEmpty()) return 1;
             if (lb == null || lb.isEmpty()) return -1;
-            return lb.get(lb.size() - 1).time().compareTo(la.get(la.size() - 1).time());
+            return lb.get(lb.size() - 1).dateTime().compareTo(la.get(la.size() - 1).dateTime());
         });
     }
 
@@ -95,7 +96,7 @@ public class WhisperHistory {
             WhisperEntry last = list.get(list.size() - 1);
             if (last.outgoing() && last.content().equals(content)) return;
         }
-        list.add(new WhisperEntry(true, content, LocalTime.now().format(TIME_FMT)));
+        list.add(new WhisperEntry(true, content, LocalDateTime.now().format(DATE_TIME_FMT)));
         trim(list);
         touchContact(contact);
         save();
@@ -109,7 +110,7 @@ public class WhisperHistory {
             WhisperEntry last = list.get(list.size() - 1);
             if (!last.outgoing() && last.content().equals(content)) return;
         }
-        list.add(new WhisperEntry(false, content, LocalTime.now().format(TIME_FMT)));
+        list.add(new WhisperEntry(false, content, LocalDateTime.now().format(DATE_TIME_FMT)));
         trim(list);
         touchContact(contact);
         save();
@@ -124,7 +125,7 @@ public class WhisperHistory {
         if (contact == null || contact.isEmpty() || content == null || content.isEmpty()) return;
         load();
         List<WhisperEntry> list = history.computeIfAbsent(contact, k -> new ArrayList<>());
-        list.add(new WhisperEntry(false, content, LocalTime.now().format(TIME_FMT), true));
+        list.add(new WhisperEntry(false, content, LocalDateTime.now().format(DATE_TIME_FMT), true));
         trim(list);
         save();
     }
@@ -256,17 +257,17 @@ public class WhisperHistory {
         for (var e : entries) {
             String senderName = e.outgoing() ? selfName : contact;
             UUID senderUuid = e.outgoing() ? selfUuid : ChatMessageStore.lookupPlayerUUID(contact);
-            LocalTime time;
+            LocalDateTime dateTime;
             try {
-                time = LocalTime.parse(e.time(), TIME_FMT);
+                dateTime = LocalDateTime.parse(e.dateTime(), DATE_TIME_FMT);
             } catch (Exception ex) {
-                time = LocalTime.now();
+                dateTime = LocalDateTime.now();
             }
             result.add(new ChatMessageStore.ChatMessage(
                 senderUuid,
                 Text.literal(senderName),
                 Text.literal(e.content()),
-                time,
+                dateTime,
                 e.outgoing(),
                 e.system(),
                 null,

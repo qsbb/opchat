@@ -12,7 +12,7 @@ import java.io.*;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
-import java.time.LocalTime;
+import java.time.LocalDateTime;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
@@ -34,6 +34,8 @@ public class ChatMessageStore {
     private static String currentWorldKey;
     private static final Map<String, String> worldTitles = new HashMap<>();
     private static final Gson GSON = new Gson();
+    private static final DateTimeFormatter DATE_TIME_FMT = DateTimeFormatter.ofPattern("yyyy-MM-dd HH:mm");
+    private static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
     private static boolean titlesLoaded;
     private static final Map<String, List<PersistedMessage>> savedHistories = new HashMap<>();
     private static boolean historiesLoaded;
@@ -148,7 +150,7 @@ public class ChatMessageStore {
         UUID senderUUID,
         Text senderName,
         Text content,
-        LocalTime time,
+        LocalDateTime dateTime,
         boolean isOwn,
         boolean isSystem,
         String replyContent,
@@ -161,7 +163,7 @@ public class ChatMessageStore {
         String senderUUID,
         String senderName,
         String content,
-        String time,
+        String dateTime,
         boolean isOwn,
         boolean isSystem,
         String replyContent,
@@ -194,7 +196,7 @@ public class ChatMessageStore {
                 && last.content().getString().equals(content.getString())) {
                 messages.set(messages.size() - 1, new ChatMessage(
                     last.senderUUID(), last.senderName(), last.content(),
-                    LocalTime.now(),
+                    LocalDateTime.now(),
                     last.isOwn(), last.isSystem(),
                     last.replyContent(), last.replySender(), last.messageHash(),
                     last.duplicateCount() + 1
@@ -222,7 +224,7 @@ public class ChatMessageStore {
             senderUUID,
             senderName != null ? senderName : Text.literal(""),
             content,
-            LocalTime.now(),
+            LocalDateTime.now(),
             own,
             isSystem,
             replyContent,
@@ -421,18 +423,18 @@ public class ChatMessageStore {
         List<ChatMessage> currentSession = new ArrayList<>(messages);
         Set<String> existing = new HashSet<>();
         for (ChatMessage message : currentSession) {
-            existing.add(message.time() + "\u0000" + message.senderName().getString() + "\u0000" + message.content().getString());
+            existing.add(message.dateTime().format(DATE_TIME_FMT) + "\u0000" + message.senderName().getString() + "\u0000" + message.content().getString());
         }
         messages.clear();
         for (PersistedMessage item : saved) {
             try {
-                String identity = item.time() + "\u0000" + item.senderName() + "\u0000" + item.content();
+                String identity = item.dateTime() + "\u0000" + item.senderName() + "\u0000" + item.content();
                 if (existing.contains(identity)) continue;
                 messages.add(new ChatMessage(
                     UUID.fromString(item.senderUUID()),
                     Text.literal(item.senderName()),
                     Text.literal(item.content()),
-                    LocalTime.parse(item.time()),
+                    LocalDateTime.parse(item.dateTime(), DATE_TIME_FMT),
                     item.isOwn(), item.isSystem(),
                     item.replyContent(), item.replySender(), item.messageHash(),
                     Math.max(1, item.duplicateCount())
@@ -450,7 +452,7 @@ public class ChatMessageStore {
         for (ChatMessage message : messages) {
             data.add(new PersistedMessage(
                 message.senderUUID().toString(), message.senderName().getString(),
-                message.content().getString(), message.time().toString(),
+                message.content().getString(), message.dateTime().format(DATE_TIME_FMT),
                 message.isOwn(), message.isSystem(), message.replyContent(),
                 message.replySender(), message.messageHash(), message.duplicateCount()
             ));
@@ -499,7 +501,7 @@ public class ChatMessageStore {
             if (msg.messageHash().equals(messageHash) && msg.senderUUID().equals(senderUUID)) {
                 if (!quoteContent.isEmpty()) {
                     messages.set(i, new ChatMessage(
-                        msg.senderUUID(), msg.senderName(), msg.content(), msg.time(),
+                        msg.senderUUID(), msg.senderName(), msg.content(), msg.dateTime(),
                         msg.isOwn(), msg.isSystem(), quoteContent, quoteSender, msg.messageHash(),
                         msg.duplicateCount()));
                 }
