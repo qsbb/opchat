@@ -52,7 +52,7 @@ public class ChatBubbleScreen extends Screen {
     private static final int SIDEBAR_ITEM_H = 18;
     private static final int SIDEBAR_TOP = 4;
 
-    private static final int ICON_S = 16;
+    static final int ICON_S = 16;
     private static final Identifier TEX_GEAR = Identifier.of("opchat", "textures/gui/settings");
     private static final Identifier TEX_SEND = Identifier.of("opchat", "textures/gui/send");
     private static boolean iconsLoaded;
@@ -63,7 +63,7 @@ public class ChatBubbleScreen extends Screen {
     private int colorPanelBg;
     private int colorTitleBg;
     private int colorBarBg;
-    private int colorInputBg;
+    int colorInputBg;
     private int colorSidebarBg;
     static final DateTimeFormatter TIME_FMT = DateTimeFormatter.ofPattern("HH:mm");
     static final DateTimeFormatter DATE_TIME_FMT = DateTimeFormatter.ofPattern("MM-dd HH:mm");
@@ -122,38 +122,38 @@ public class ChatBubbleScreen extends Screen {
     private TextFieldWidget nicknameField;
 
     // Quick inputs
-    private boolean quickPanelOpen;
-    private TextFieldWidget quickEditField;
-    private int quickIconX;
-    private int pasteIconX; // 输入框内右侧粘贴按钮位置
+    boolean quickPanelOpen;
+    TextFieldWidget quickEditField;
+    int quickIconX;
+    int pasteIconX; // 输入框内右侧粘贴按钮位置
     private static final int PASTE_ICON_S = 14;
-    private static final int QUICK_PANEL_W = 180;
-    private static final int QUICK_ITEM_H = 18;
-    private static final int QUICK_EDIT_H = 22;
-    private static final int DRAG_HANDLE_W = 12; // 拖拽手柄宽度
+    static final int QUICK_PANEL_W = 180;
+    static final int QUICK_ITEM_H = 18;
+    static final int QUICK_EDIT_H = 22;
+    static final int DRAG_HANDLE_W = 12; // 拖拽手柄宽度
 
     // Quick input drag sorting
-    private boolean quickInputDragging;
-    private int quickInputDragIndex = -1;
+    boolean quickInputDragging;
+    int quickInputDragIndex = -1;
 
     // Quick command drag sorting
-    private boolean quickCmdDragging;
-    private int quickCmdDragIndex = -1;
+    boolean quickCmdDragging;
+    int quickCmdDragIndex = -1;
 
     // Quick commands (/ shortcut)
-    private int slashIconX;
-    private boolean quickCmdPanelOpen;
-    private boolean quickCmdEditing; // show add/edit form
-    private int quickCmdEditIndex = -1;
-    private TextFieldWidget quickCmdDisplayField;
-    private TextFieldWidget quickCmdCommandField;
-    private TextFieldWidget proxyCmdField; // invisible proxy for ChatInputSuggestor (handles @* → aa)
-    private boolean syncingProxy = false;
-    private int[] proxyPlaceholderStarts = new int[0]; // positions of "aa" that replace @*
-    private ChatInputSuggestor quickCmdSuggestor;
-    private static final int QUICK_CMD_PANEL_W = 200;
-    private static final int QUICK_CMD_ITEM_H = 18;
-    private static final int QUICK_CMD_FORM_H = 78;
+    int slashIconX;
+    boolean quickCmdPanelOpen;
+    boolean quickCmdEditing; // show add/edit form
+    int quickCmdEditIndex = -1;
+    TextFieldWidget quickCmdDisplayField;
+    TextFieldWidget quickCmdCommandField;
+    TextFieldWidget proxyCmdField; // invisible proxy for ChatInputSuggestor (handles @* → aa)
+    boolean syncingProxy = false;
+    int[] proxyPlaceholderStarts = new int[0]; // positions of "aa" that replace @*
+    ChatInputSuggestor quickCmdSuggestor;
+    static final int QUICK_CMD_PANEL_W = 200;
+    static final int QUICK_CMD_ITEM_H = 18;
+    static final int QUICK_CMD_FORM_H = 78;
 
     // Hidden contacts group (collapsible)
     private boolean hiddenGroupExpanded = false;
@@ -2127,7 +2127,7 @@ public class ChatBubbleScreen extends Screen {
         }
     }
 
-    private void closeQuickPanel() {
+    void closeQuickPanel() {
         quickPanelOpen = false;
         quickEditField.setVisible(false);
         quickEditField.setFocused(false);
@@ -2135,7 +2135,7 @@ public class ChatBubbleScreen extends Screen {
         setFocused(input);
     }
 
-    private void addQuickInputFromField() {
+    void addQuickInputFromField() {
         String text = quickEditField.getText().trim();
         if (text.isEmpty()) return;
         if (!ChatBubbleConfig.QUICK_INPUTS.contains(text)) {
@@ -2145,7 +2145,7 @@ public class ChatBubbleScreen extends Screen {
         quickEditField.setText("");
     }
 
-    private void sendQuickInput(String text) {
+    void sendQuickInput(String text) {
         closeQuickPanel();
         boolean isWhisper = selectedContact != null;
         if (isWhisper) {
@@ -2186,7 +2186,7 @@ public class ChatBubbleScreen extends Screen {
         };
     }
 
-    private List<ChatBubbleConfig.QuickCommand> getActiveQuickCommandList() {
+    List<ChatBubbleConfig.QuickCommand> getActiveQuickCommandList() {
         return ChatBubbleConfig.getActiveQuickCommands(getCurrentModeKey());
     }
 
@@ -2571,7 +2571,7 @@ public class ChatBubbleScreen extends Screen {
         }
     }
 
-    private void closeQuickCmdPanel() {
+    void closeQuickCmdPanel() {
         quickCmdPanelOpen = false;
         quickCmdEditing = false;
         quickCmdDisplayField.setVisible(false);
@@ -2581,7 +2581,7 @@ public class ChatBubbleScreen extends Screen {
         setFocused(input);
     }
 
-    private void executeQuickCommand(ChatBubbleConfig.QuickCommand cmd) {
+    void executeQuickCommand(ChatBubbleConfig.QuickCommand cmd) {
         String command = cmd.command;
         closeQuickCmdPanel();
 
@@ -2629,7 +2629,7 @@ public class ChatBubbleScreen extends Screen {
         }
     }
 
-    private void executeQuickCommandForPlayer(ChatBubbleConfig.QuickCommand cmd, String player) {
+    void executeQuickCommandForPlayer(ChatBubbleConfig.QuickCommand cmd, String player) {
         String command = cmd.command;
         if (player != null) {
             command = command.replace("@*", player);
@@ -2761,7 +2761,7 @@ public class ChatBubbleScreen extends Screen {
     }
 
     // 添加到发送历史，并对相同命令去重：仅保留每个命令最新发送的一条
-    private void addToHistoryAndDeduplicate(String text) {
+    void addToHistoryAndDeduplicate(String text) {
         client.inGameHud.getChatHud().addToMessageHistory(text);
         var history = client.inGameHud.getChatHud().getMessageHistory();
         java.util.Set<String> seen = new java.util.HashSet<>();
